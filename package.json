@@ -1,0 +1,27 @@
+{
+  "name": "auction-app",
+  "version": "1.0.0",
+  "description": "Asta in tempo reale con Node.js, Express e WebSocket",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "csv-parser": "^3.2.0",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "node-fetch": "^3.3.2",
+    "ws": "^8.17.0",
+	"dotenv": "^16.0.0",
+	"uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "author": "",
+  "license": "MIT"
+}

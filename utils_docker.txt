@@ -1,0 +1,5 @@
+docker build -t auction-app .
+docker run --name auction --rm -p 3000:3000 auction-app
+node tools/ingest-images.js listone_1.csv public/players output.csv
+
+Created tunnel asta-tunnel with id ac661d94-158b-4e6f-943b-8c62f5acd3a1
