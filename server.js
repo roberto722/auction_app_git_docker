@@ -155,10 +155,22 @@ app.post('/upload', upload.single('csv'), async (req, res) => {
 
   try {
     let list = await parseCsv();
-    if (!list.length) {
-      // probabile assenza di header: riparsiamo con indici numerici
+
+    const isNumeric = (v) => /^\d+$/.test(String(v || ''));
+    let first = list[0];
+
+    if (!list.length || (first && (isNumeric(first.Nome) || isNumeric(first.Ruolo)))) {
+      // possibile assenza di header: riparsiamo con indici numerici
       list = await parseCsv({ headers: false });
+      first = list[0];
     }
+
+    if (!first || !first.Nome || !first.Ruolo || isNumeric(first.Nome) || isNumeric(first.Ruolo)) {
+      console.warn('[CSV] nessuna intestazione valida (Nome/Ruolo)');
+      try { fs.unlinkSync(req.file.path); } catch {}
+      return res.status(400).json({ success: false, error: 'CSV senza intestazioni valide (Nome/Ruolo)' });
+    }
+
     try { fs.unlinkSync(req.file.path); } catch {}
     players = list;
     if (players[0]) console.log('[CSV] Prima riga normalizzata:', players[0]);
