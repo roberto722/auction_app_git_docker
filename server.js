@@ -690,21 +690,36 @@ wss.on('connection', (ws) => {
 	}
 
 
-    // Utente normale / monitor (senza PIN). role opzionale: 'bidder' (default) o 'monitor'
+    // Accesso diretto senza invito: consentito solo ai monitor con PIN
     if (msg.type === 'join') {
       const name = (msg.name || 'Anonimo').trim();
-      const role = (msg.role === 'monitor') ? 'monitor' : 'bidder';
+      const role = msg.role;
+
+      if (role === 'bidder') {
+        ws.send(JSON.stringify({ type: 'error', message: 'I partecipanti devono usare un link d\'invito.' }));
+        return;
+      }
+
+      if (role !== 'monitor') {
+        ws.send(JSON.stringify({ type: 'error', message: 'Ruolo non valido.' }));
+        return;
+      }
+
+      if (String(msg.pin) !== HOST_PIN) {
+        ws.send(JSON.stringify({ type: 'error', message: 'PIN errato' }));
+        return;
+      }
 
       const c = clients.get(clientId);
       c.name = name;
-      c.role = role;
+      c.role = 'monitor';
       ensureBudgetFields(c);
 
-      ws.send(JSON.stringify({ type: 'joined', success: true, name, role, clientId }));
+      ws.send(JSON.stringify({ type: 'joined', success: true, name, role: 'monitor', clientId }));
       ws.send(JSON.stringify({ type: 'players-list', players }));
       sendStateToClient(c, ws);
       broadcastUsers();
-	  addToRoundIfEligible(clientId);
+      // monitor non vengono aggiunti al giro nominatori
       return;
     }
 

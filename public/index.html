@@ -736,13 +736,17 @@
 		return;
 	  }
 	  // 2) fallback: usa l’ultimo login manuale salvato
-	  try {
-		const last = JSON.parse(localStorage.getItem('lastLogin') || '{}');
-		if (last?.name && last?.role) {
-		  ws.send(JSON.stringify({ type:'join', name:last.name, role:last.role==='monitor'?'monitor':'bidder' }));
-		  if (last.role === 'host' && last.pin) ws.send(JSON.stringify({ type:'host-login', pin:last.pin }));
-		}
-	  } catch {}
+          try {
+                const last = JSON.parse(localStorage.getItem('lastLogin') || '{}');
+                if (last?.name && last?.role) {
+                  if (last.role === 'host' || last.role === 'monitor') {
+                        if (last.pin) {
+                          ws.send(JSON.stringify({ type:'join', name:last.name, role:'monitor', pin:last.pin }));
+                          if (last.role === 'host') ws.send(JSON.stringify({ type:'host-login', pin:last.pin }));
+                        }
+                  }
+                }
+          } catch {}
 	}
 	
 	function scheduleReconnect(){
@@ -1265,34 +1269,44 @@ function doNominatePlayer(p){
 
     // ✅ LOGIN UI: bind select/btn alla load
     document.addEventListener('DOMContentLoaded', () => {
-	  // auto-join se ho già un invito salvato
-	  const token = localStorage.getItem('inviteToken');
-	  if (token) {
-		ensureWS(() => {
-		  try { ws.send(JSON.stringify({ type: 'join-by-invite', token })); } catch {}
-		});
-	  }
+          // auto-join se ho già un invito salvato
+          const token = localStorage.getItem('inviteToken');
+          if (token) {
+                ensureWS(() => {
+                  try { ws.send(JSON.stringify({ type: 'join-by-invite', token })); } catch {}
+                });
+          }
 
-	  // costruzione UI + bind login
-	  buildUI();
+          // costruzione UI + bind login
+          buildUI();
 
-	  const roleSel = $('joinRole');
-	  const pinRow  = $('pinRow');
-	  const btn     = $('loginBtn');
+          const roleSel = $('joinRole');
+          const pinRow  = $('pinRow');
+          const btn     = $('loginBtn');
 
-	  if (roleSel) {
-		roleSel.addEventListener('change', e => {
-		  const role = e.target.value;
-		  pinRow.style.display = (role === 'host') ? '' : 'none';
-		});
-	  }
-	  if (btn) btn.addEventListener('click', doLogin);
-	  document.addEventListener('click', (e) => {
-		if (e.target && e.target.id === 'logoutBtn') {
-		  doLogout();
-		}
-	  });
-	});
+          // Se non c'è un token d'invito, rimuovi l'opzione partecipante
+          if (!token && roleSel) {
+                const opt = roleSel.querySelector('option[value="bidder"]');
+                if (opt) opt.remove();
+          }
+
+          if (roleSel) {
+                // mostra il campo PIN per monitor e host
+                const roleChange = e => {
+                  const role = e.target.value;
+                  pinRow.style.display = (role === 'host' || role === 'monitor') ? '' : 'none';
+                };
+                roleSel.addEventListener('change', roleChange);
+                // stato iniziale
+                roleChange({ target: roleSel });
+          }
+          if (btn) btn.addEventListener('click', doLogin);
+          document.addEventListener('click', (e) => {
+                if (e.target && e.target.id === 'logoutBtn') {
+                  doLogout();
+                }
+          });
+        });
 		
 		document.addEventListener('click', (e) => {
 		  const btn = e.target.closest('[data-expel]');
@@ -1372,32 +1386,41 @@ function doNominatePlayer(p){
   }
 	
     function doLogin(){
-	  const token = localStorage.getItem('inviteToken');
-	  const name  = (document.getElementById('joinName')?.value || '').trim();
-	  const role  = document.getElementById('joinRole')?.value || 'bidder';
-	  const pin   = (document.getElementById('hostPin')?.value || '').trim();
+          const token = localStorage.getItem('inviteToken');
+          const name  = (document.getElementById('joinName')?.value || '').trim();
+          const role  = document.getElementById('joinRole')?.value || 'bidder';
+          const pin   = (document.getElementById('hostPin')?.value || '').trim();
 
-	  // ⬇️ memorizza un "ultimo login" soltanto se NON stai usando un invito
-	  if (!token) {
-		try {
-		  localStorage.setItem('lastLogin', JSON.stringify({ name, role, pin: (role==='host'?pin:'') }));
-		} catch {}
-	  }
+          // ⬇️ memorizza un "ultimo login" soltanto se NON stai usando un invito
+          if (!token) {
+                try {
+                  localStorage.setItem('lastLogin', JSON.stringify({ name, role, pin: (role==='host'?pin:'') }));
+                } catch {}
+          }
 
-	  ensureWS(() => {
-		if (token) {
-		  ws.send(JSON.stringify({ type:'join-by-invite', token }));
-		  if (role === 'host' && pin) ws.send(JSON.stringify({ type:'host-login', pin }));
-		  return;
-		}
-		if (!name) { alert('Inserisci il nome'); return; }
-		ws.send(JSON.stringify({ type:'join', name, role: (role==='monitor' ? 'monitor' : 'bidder') }));
-		if (role === 'host') {
-		  if (!pin) { alert('Inserisci il PIN gestore'); return; }
-		  ws.send(JSON.stringify({ type:'host-login', pin }));
-		}
-	  });
-	}
+          if (!token && role === 'bidder') {
+                alert('I partecipanti devono usare un link d\'invito.');
+                return;
+          }
+
+          ensureWS(() => {
+                if (token) {
+                  ws.send(JSON.stringify({ type:'join-by-invite', token }));
+                  if (role === 'host' && pin) ws.send(JSON.stringify({ type:'host-login', pin }));
+                  return;
+                }
+                if (!name) { alert('Inserisci il nome'); return; }
+
+                if (role === 'monitor' || role === 'host') {
+                  if (!pin) { alert('Inserisci il PIN gestore'); return; }
+                  ws.send(JSON.stringify({ type:'join', name, role: 'monitor', pin }));
+                  if (role === 'host') {
+                        ws.send(JSON.stringify({ type:'host-login', pin }));
+                  }
+                  return;
+                }
+          });
+        }
 
 
 
