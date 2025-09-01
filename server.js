@@ -97,48 +97,73 @@ app.get('/logs/file/:name', (req, res) => {
   res.download(file, name);
 });
 
-// Rimuove BOM/spazi dagli header
+// Rimuove BOM/spazi dagli header e li rende case-insensitive
 function normalizeKeys(obj) {
   const out = {};
-  for (const k in obj) out[k.replace(/^\uFEFF/, '').trim()] = obj[k];
+  for (const k in obj) out[k.replace(/^\uFEFF/, '').trim().toLowerCase()] = obj[k];
   return out;
 }
 
 // === UPLOAD CSV ===
-const upload = multer({ dest: path.join(__dirname, 'uploads') });
-app.post('/upload-players', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ success:false, error:'Nessun file' });
-  const rows = [];
-  fs.createReadStream(req.file.path)
-    .pipe(csv())
-    .on('data', (raw) => {
-      const row = normalizeKeys(raw);
-      rows.push(row);
-    })
-    .on('end', () => {
-      try {
-        const list = rows.map((r) => ({
-          name: (r[Object.keys(r)[1]] || '').trim(),        // colonna 2
-          role: (r[Object.keys(r)[3]] || '').trim(),        // colonna 4 (P/D/C/A)
-          team: (r[Object.keys(r)[9]] || '').trim(),        // colonna 10
-          image: (r[Object.keys(r)[15]] || '').trim() || null // colonna 16
-        })).filter(x => x.name);
-        players = list;
-        broadcast({ type:'players-list', players });
-        pushLog({ type:'players-uploaded', time: now(), count: players.length });
-		
-		fs.unlink(req.file.path, () => {});
-		
-        res.json({ success:true, count: players.length, players });
-      } catch (e) {
-		fs.unlink(req.file.path, () => {});
-        res.status(500).json({ success:false, error: e.message });
+const MAX_CSV_SIZE = 1024 * 1024; // 1MB
+const upload = multer({
+  dest: path.join(__dirname, 'uploads'),
+  limits: { fileSize: MAX_CSV_SIZE }
+});
+
+app.post('/upload-players', (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ success:false, error: 'File troppo grande' });
       }
-    })
-	.on('error', (err) => {
-      try { fs.unlink(req.file.path, () => {}); } catch {}
-      res.status(400).json({ success:false, error:String(err) });
-    });
+      return res.status(400).json({ success:false, error: err.message });
+    }
+
+    if (!req.file) return res.status(400).json({ success:false, error:'Nessun file' });
+
+    const rows = [];
+    const requiredHeaders = ['name', 'role', 'team', 'image'];
+    let headersValidated = false;
+    const parser = csv();
+    fs.createReadStream(req.file.path)
+      .pipe(parser)
+      .on('data', (raw) => {
+        const row = normalizeKeys(raw);
+        if (!headersValidated) {
+          const headers = Object.keys(row);
+          const missing = requiredHeaders.filter(h => !headers.includes(h));
+          if (missing.length) {
+            parser.destroy(new Error('Intestazioni mancanti: ' + missing.join(', ')));
+            return;
+          }
+          headersValidated = true;
+        }
+        rows.push(row);
+      })
+      .on('end', () => {
+        try {
+          const list = rows.map((r) => ({
+            name: (r['name'] || '').trim(),
+            role: (r['role'] || '').trim(),
+            team: (r['team'] || '').trim(),
+            image: (r['image'] || '').trim() || null
+          })).filter(x => x.name);
+          players = list;
+          broadcast({ type:'players-list', players });
+          pushLog({ type:'players-uploaded', time: now(), count: players.length });
+          fs.unlink(req.file.path, () => {});
+          res.json({ success:true, count: players.length, players });
+        } catch (e) {
+          fs.unlink(req.file.path, () => {});
+          res.status(500).json({ success:false, error: e.message });
+        }
+      })
+      .on('error', (err) => {
+        fs.unlink(req.file.path, () => {});
+        res.status(400).json({ success:false, error: String(err.message || err) });
+      });
+  });
 });
 
 // === INVITES (semplici) ===
