@@ -2227,21 +2227,32 @@ function doNominatePlayer(p){
 	  return out;
 	}
 	
-	function canonicalRowFront(row) {
-	  // Se è già canonico (dal server), passa-through
-	  if (row && typeof row === 'object' && ('Nome' in row || 'Ruolo' in row || 'Squadra' in row)) return row;
-	  // Altrimenti, prova per posizione come sul server
-	  const get = (i) => Array.isArray(row) ? String(row[i] ?? '').trim()
-		: String((row?.[String(i)] ?? row?.[i] ?? '')).trim();
-	  const MAP = { P:'Portiere', D:'Difensore', C:'Centrocampista', A:'Attaccante' };
-	  const Nome      = get(1);
-	  const roleCode  = get(3).toUpperCase().slice(0,1);
-	  const Ruolo     = MAP[roleCode] || '';
-	  const Squadra   = get(9);
-	  const Immagine  = get(15);
-	  const ValoreBase = 0;
-	  return { Nome, Ruolo, Squadra, ValoreBase, Immagine };
-	}
+        function canonicalRowFront(row) {
+          // Se è già canonico (dal server), passa-through
+          if (row && typeof row === 'object') {
+                if ('Nome' in row || 'Ruolo' in row || 'Squadra' in row) return row;
+                // Se arriva in formato inglese {name,role,team,image}
+                if ('name' in row || 'role' in row || 'team' in row || 'image' in row) {
+                  const Nome        = String(row.name ?? '').trim();
+                  const Ruolo       = String(row.role ?? '').trim();
+                  const Squadra     = String(row.team ?? '').trim();
+                  const Immagine    = String(row.image ?? '').trim();
+                  const ValoreBase  = Number(row.base ?? row.ValoreBase ?? 0) || 0;
+                  return { Nome, Ruolo, Squadra, ValoreBase, Immagine };
+                }
+          }
+          // Altrimenti, prova per posizione come sul server
+          const get = (i) => Array.isArray(row) ? String(row[i] ?? '').trim()
+                : String((row?.[String(i)] ?? row?.[i] ?? '')).trim();
+          const MAP = { P:'Portiere', D:'Difensore', C:'Centrocampista', A:'Attaccante' };
+          const Nome      = get(1);
+          const roleCode  = get(3).toUpperCase().slice(0,1);
+          const Ruolo     = MAP[roleCode] || '';
+          const Squadra   = get(9);
+          const Immagine  = get(15);
+          const ValoreBase = 0;
+          return { Nome, Ruolo, Squadra, ValoreBase, Immagine };
+        }
 
 
 	async function onUploadCsv(){
