@@ -409,13 +409,15 @@ function broadcastUsers() {
     ensureBudgetFields(c);
     users.push({
       id,
+      participantId: c.participantId || null,
       name: c.name,
       isHost: c.isHost,
       role: c.role || 'bidder',
       credits: c.credits ?? 0,
       initialCredits: c.initialCredits ?? 0,
       slotsByRole: cloneSlots(c.slotsByRole || {}),
-      initialSlotsByRole: cloneSlots(c.initialSlotsByRole || {})
+      initialSlotsByRole: cloneSlots(c.initialSlotsByRole || {}),
+      online: true
     });
   }
   broadcast({ type: 'user-list', users });
@@ -1121,6 +1123,49 @@ const { v4: uuid } = require('uuid');
 const { sign, verify } = require('./lib/token');
 const { getParticipant, upsertParticipant, deleteParticipant, listParticipants } = require('./lib/registry');
 
+function listParticipantsWithOnline() {
+  const regs = listParticipants();
+  const out = [];
+  const used = new Set();
+
+  for (const [id, c] of clients) {
+    ensureBudgetFields(c);
+    out.push({
+      id,
+      participantId: c.participantId || null,
+      name: c.name,
+      isHost: !!c.isHost,
+      role: c.role || 'bidder',
+      credits: c.credits ?? 0,
+      initialCredits: c.initialCredits ?? 0,
+      slotsByRole: cloneSlots(c.slotsByRole || {}),
+      initialSlotsByRole: cloneSlots(c.initialSlotsByRole || {}),
+      online: true
+    });
+    if (c.participantId) used.add(c.participantId);
+  }
+
+  for (const p of regs) {
+    if (used.has(p.id)) continue;
+    out.push({
+      id: p.id,
+      participantId: p.id,
+      name: p.name,
+      isHost: !!p.isHost,
+      role: p.role || 'bidder',
+      credits: Number.isFinite(p.credits) ? p.credits : 0,
+      initialCredits: Number.isFinite(p.initialCredits)
+        ? p.initialCredits
+        : (Number.isFinite(p.credits) ? p.credits : 0),
+      slotsByRole: cloneSlots(p.slotsByRole || {}),
+      initialSlotsByRole: cloneSlots(p.initialSlotsByRole || p.slotsByRole || {}),
+      online: false
+    });
+  }
+
+  return out;
+}
+
 const INVITE_SECRET = process.env.INVITE_SECRET || 'dev-secret';
 app.use(express.json());
 
@@ -1143,6 +1188,10 @@ function randomToken(n = 32) {
   return require('crypto').randomBytes(n).toString('base64url');
 }
 
+app.get('/host/participants/list', (req, res) => {
+  if (!isHostReq(req)) return res.status(403).json({ success:false, error:'forbidden' });
+  res.json({ success: true, participants: listParticipantsWithOnline() });
+});
 
 // POST crea/ottieni (idempotente)
 app.post('/host/invite/create', express.json(), (req, res) => {

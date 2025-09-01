@@ -1578,13 +1578,29 @@ function doNominatePlayer(p){
 
 
         if (d.type === 'user-list') {
-          usersCache = d.users || [];
-          renderUsers(usersCache);
-		  renderInviteUsersSelect(); 
-          // aggiorna pannellino bidder, se sono bidder e conosco il mio id
-          if (myRole === 'bidder' && myId) {
-            const me = usersCache.find(u => u.id === myId);
-            if (me) updateBidderBudget(me);
+          const base = d.users || [];
+          if (isHost) {
+            fetch('/host/participants/list').then(r=>r.json()).then(j=>{
+              usersCache = j.participants || base;
+              renderUsers(usersCache);
+              renderInviteUsersSelect();
+              if (myRole === 'bidder' && myId) {
+                const me = usersCache.find(u => u.id === myId);
+                if (me) updateBidderBudget(me);
+              }
+            }).catch(()=>{
+              usersCache = base;
+              renderUsers(usersCache);
+              renderInviteUsersSelect();
+            });
+          } else {
+            usersCache = base;
+            renderUsers(usersCache);
+            renderInviteUsersSelect();
+            if (myRole === 'bidder' && myId) {
+              const me = usersCache.find(u => u.id === myId);
+              if (me) updateBidderBudget(me);
+            }
           }
           return;
         }
@@ -2007,50 +2023,51 @@ function doNominatePlayer(p){
       ensureWS(()=> ws.send(JSON.stringify({ type:'host:update-bidder', clientId, slotsDeltaRole: { role, delta } })));
     }
 
-	function renderUsers(list){
-	  const tb = $('users'); if (!tb) return;
-	  tb.innerHTML = '';
+        function renderUsers(list){
+          const tb = $('users'); if (!tb) return;
+          tb.innerHTML = '';
 
-	  (list||[]).forEach(u=>{
-		const S = u.slotsByRole || { por:0, dif:0, cen:0, att:0 };
-		const credits = Number(u.credits ?? 0);
-		const initCr  = Number(u.initialCredits ?? credits);
-		const spent   = Math.max(0, initCr - credits);
+          (list||[]).forEach(u=>{
+                const S = u.slotsByRole || { por:0, dif:0, cen:0, att:0 };
+                const credits = Number(u.credits ?? 0);
+                const initCr  = Number(u.initialCredits ?? credits);
+                const spent   = Math.max(0, initCr - credits);
 
-		const tr = document.createElement('tr');
-		tr.innerHTML = `
-		  <td>${escapeHtml(u.name || '—')}</td>
-		  <td>${escapeHtml(u.isHost ? 'Gestore' : (u.role || 'bidder'))}</td>
-		  <td class="mono">${credits}</td>
-		  <td class="mono">${spent}</td>
-		  <td class="mono">${Number(S.por ?? 0)}</td>
-		  <td class="mono">${Number(S.dif ?? 0)}</td>
-		  <td class="mono">${Number(S.cen ?? 0)}</td>
-		  <td class="mono">${Number(S.att ?? 0)}</td>
-		  <td></td>
-		`;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                  <td>${escapeHtml(u.name || '—')}<br><small>${escapeHtml(u.participantId || '')}</small></td>
+                  <td>${escapeHtml(u.isHost ? 'Gestore' : (u.role || 'bidder'))}</td>
+                  <td>${u.online ? '🟢 online' : '⚪ offline'}</td>
+                  <td class="mono">${credits}</td>
+                  <td class="mono">${spent}</td>
+                  <td class="mono">${Number(S.por ?? 0)}</td>
+                  <td class="mono">${Number(S.dif ?? 0)}</td>
+                  <td class="mono">${Number(S.cen ?? 0)}</td>
+                  <td class="mono">${Number(S.att ?? 0)}</td>
+                  <td></td>
+                `;
 
-		const tdActions = tr.lastElementChild;
-		
-		const isMe = (u.id === myId);
+                const tdActions = tr.lastElementChild;
 
-		// helper per creare bottoni coerenti
-		const addBtn = (label, cb, { title='', className='btn', disabled=false, ariaLabel='' } = {}) => {
-		  const b = document.createElement('button');
-		  b.textContent = label;
-		  b.className = className;
-		  if (title) b.title = title;
-		  if (ariaLabel) b.setAttribute('aria-label', ariaLabel);
-		  b.disabled = !!disabled;
-		  b.onclick = cb;
-		  return b;
-		};
+                const isMe = (u.id === myId);
 
-		// Azioni solo se NON host
-		if (!u.isHost) {
-		  // Crediti ±
-		  tdActions.append(
-			addBtn('−10', ()=> onAdjCredits(u.id, -10), { title:'-10 crediti', ariaLabel:`Riduci 10 crediti a ${u.name||'utente'}` }),
+                // helper per creare bottoni coerenti
+                const addBtn = (label, cb, { title='', className='btn', disabled=false, ariaLabel='' } = {}) => {
+                  const b = document.createElement('button');
+                  b.textContent = label;
+                  b.className = className;
+                  if (title) b.title = title;
+                  if (ariaLabel) b.setAttribute('aria-label', ariaLabel);
+                  b.disabled = !!disabled;
+                  b.onclick = cb;
+                  return b;
+                };
+
+                // Azioni solo se NON host e online
+                if (!u.isHost && u.online) {
+                  // Crediti ±
+                  tdActions.append(
+                        addBtn('−10', ()=> onAdjCredits(u.id, -10), { title:'-10 crediti', ariaLabel:`Riduci 10 crediti a ${u.name||'utente'}` }),
 			addBtn('−1',  ()=> onAdjCredits(u.id, -1),  { title:'-1 credito',  ariaLabel:`Riduci 1 credito a ${u.name||'utente'}` }),
 			addBtn('+1',  ()=> onAdjCredits(u.id, +1),  { title:'+1 credito',  ariaLabel:`Aumenta 1 credito a ${u.name||'utente'}` }),
 			addBtn('+10', ()=> onAdjCredits(u.id, +10), { title:'+10 crediti', ariaLabel:`Aumenta 10 crediti a ${u.name||'utente'}` }),
@@ -2722,14 +2739,14 @@ document.addEventListener('DOMContentLoaded', () => {
 			  <div class="table-wrap">
 				<table>
 				  <thead>
-					<tr>
-					  <th>Nome</th><th>Ruolo</th><th>Crediti</th><th>Spesi</th><th>POR</th><th>DIF</th><th>CEN</th><th>ATT</th><th>Azioni</th>
-					</tr>
-				  </thead>
-				  <tbody id="users"></tbody>
-				</table>
-			  </div>
-			</div>
+                                        <tr>
+                                          <th>Nome</th><th>Ruolo</th><th>Stato</th><th>Crediti</th><th>Spesi</th><th>POR</th><th>DIF</th><th>CEN</th><th>ATT</th><th>Azioni</th>
+                                        </tr>
+                                  </thead>
+                                  <tbody id="users"></tbody>
+                                </table>
+                          </div>
+                        </div>
 			
 			<div class="section full" id="invitesSection">
 			  <div class="section-title">Inviti</div>
