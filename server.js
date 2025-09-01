@@ -97,13 +97,6 @@ app.get('/logs/file/:name', (req, res) => {
   res.download(file, name);
 });
 
-// Rimuove BOM/spazi dagli header e li rende case-insensitive
-function normalizeKeys(obj) {
-  const out = {};
-  for (const k in obj) out[k.replace(/^\uFEFF/, '').trim().toLowerCase()] = obj[k];
-  return out;
-}
-
 // === UPLOAD CSV ===
 const MAX_CSV_SIZE = 1024 * 1024; // 1MB
 const upload = multer({
@@ -124,31 +117,41 @@ app.post('/upload-players', (req, res) => {
 
     const rows = [];
     const requiredHeaders = ['name', 'role', 'team', 'image'];
-    let headersValidated = false;
-    const parser = csv();
     fs.createReadStream(req.file.path)
-      .pipe(parser)
-      .on('data', (raw) => {
-        const row = normalizeKeys(raw);
-        if (!headersValidated) {
-          const headers = Object.keys(row);
-          const missing = requiredHeaders.filter(h => !headers.includes(h));
-          if (missing.length) {
-            parser.destroy(new Error('Intestazioni mancanti: ' + missing.join(', ')));
-            return;
-          }
-          headersValidated = true;
-        }
-        rows.push(row);
-      })
+      .pipe(csv({ headers: false }))
+      .on('data', (row) => rows.push(row))
       .on('end', () => {
         try {
-          const list = rows.map((r) => ({
-            name: (r['name'] || '').trim(),
-            role: (r['role'] || '').trim(),
-            team: (r['team'] || '').trim(),
-            image: (r['image'] || '').trim() || null
-          })).filter(x => x.name);
+          if (!rows.length) throw new Error('File CSV vuoto');
+
+          const normalize = (v) => String(v || '').replace(/^\uFEFF/, '').trim().toLowerCase();
+          const headerRow = rows[0].map(normalize);
+          const hasHeaders = requiredHeaders.every(h => headerRow.includes(h));
+
+          let list = [];
+          if (hasHeaders) {
+            const idx = {};
+            headerRow.forEach((h, i) => { idx[h] = i; });
+            list = rows.slice(1).map(r => ({
+              name: String(r[idx.name] || '').trim(),
+              role: String(r[idx.role] || '').trim(),
+              team: String(r[idx.team] || '').trim(),
+              image: String(r[idx.image] || '').trim() || null
+            })).filter(x => x.name);
+          } else {
+            const MAP = { P:'Portiere', D:'Difensore', C:'Centrocampista', A:'Attaccante' };
+            list = rows.map(r => {
+              const name = String(r[1] ?? '').trim();
+              const roleCode = String(r[3] ?? '').trim().toUpperCase().slice(0,1);
+              const role = MAP[roleCode] || '';
+              const team = String(r[9] ?? '').trim();
+              const image = String(r[15] ?? '').trim() || null;
+              return { name, role, team, image };
+            }).filter(x => x.name);
+          }
+
+          if (!list.length) throw new Error('Formato CSV non riconosciuto o nessun giocatore valido');
+
           players = list;
           broadcast({ type:'players-list', players });
           pushLog({ type:'players-uploaded', time: now(), count: players.length });
@@ -156,7 +159,7 @@ app.post('/upload-players', (req, res) => {
           res.json({ success:true, count: players.length, players });
         } catch (e) {
           fs.unlink(req.file.path, () => {});
-          res.status(500).json({ success:false, error: e.message });
+          res.status(400).json({ success:false, error: e.message });
         }
       })
       .on('error', (err) => {
