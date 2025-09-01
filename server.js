@@ -79,16 +79,15 @@ try {
   console.error('[log] mkdir error:', e);
 }
 
-function addToRoundIfEligible(clientId) {
+function addToRoundIfEligible(participantId) {
   if (!roundMode) return false;
-  if (!clients.has(clientId)) return false;
-  const c = clients.get(clientId);
+  const c = getClientByParticipantId(participantId);
   if (!eligibleBidder(c)) return false;
 
-  if (!nominationOrder.includes(clientId)) {
-    nominationOrder.push(clientId);           // accoda al giro corrente
+  if (!nominationOrder.includes(participantId)) {
+    nominationOrder.push(participantId);           // accoda al giro corrente
     // se non c’è nominatore attivo (o era invalido) scegli il primo valido
-    if (!currentNominatorId || !clients.has(currentNominatorId) || !eligibleBidder(clients.get(currentNominatorId))) {
+    if (!currentNominatorId || !eligibleBidder(getClientByParticipantId(currentNominatorId))) {
       pickFirstEligible();
     }
     broadcastRoundState();
@@ -233,9 +232,16 @@ app.post('/upload', upload.single('csv'), async (req, res) => {
 
 // === Round Robin (1 nomina per turno) ===
 let roundMode = false;
-let nominationOrder = [];      // array di clientId
+let nominationOrder = [];      // array di participantId
 let nominationIndex = 0;       // indice corrente dentro nominationOrder
-let currentNominatorId = null; // id a cui “tocca”
+let currentNominatorId = null; // participantId a cui "tocca"
+
+const participantClients = new Map(); // participantId -> clientId
+
+function getClientByParticipantId(pid) {
+  const cid = participantClients.get(pid);
+  return cid ? clients.get(cid) || null : null;
+}
 
 function eligibleBidder(c){
   if (!c) return false;
@@ -245,8 +251,20 @@ function eligibleBidder(c){
 
 function buildNominationOrder(strategy='random'){
   const arr = [];
-  for (const [id, c] of clients) if (!c.isHost && c.role !== 'monitor') {
-    arr.push({ id, name: c.name || 'Anonimo' });
+  const regs = listParticipants();
+  for (const p of regs) {
+    if (!p.isHost && p.role !== 'monitor') {
+      arr.push({ id: p.id, name: p.name || 'Anonimo' });
+    }
+  }
+  // include any connected participants not yet persisted
+  for (const [pid, cid] of participantClients) {
+    if (!arr.some(x => x.id === pid)) {
+      const c = clients.get(cid);
+      if (c && !c.isHost && c.role !== 'monitor') {
+        arr.push({ id: pid, name: c.name || 'Anonimo' });
+      }
+    }
   }
   if (strategy === 'name') {
     arr.sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'it', {sensitivity:'base'}));
@@ -260,8 +278,8 @@ function buildNominationOrder(strategy='random'){
 function pickFirstEligible(){
   if (!roundMode || nominationOrder.length===0) { currentNominatorId=null; return null; }
   for (let k=0; k<nominationOrder.length; k++){
-    const id = nominationOrder[k];
-    if (eligibleBidder(clients.get(id))) { nominationIndex = k; currentNominatorId = id; return id; }
+    const pid = nominationOrder[k];
+    if (eligibleBidder(getClientByParticipantId(pid))) { nominationIndex = k; currentNominatorId = pid; return pid; }
   }
   currentNominatorId = null; return null;
 }
@@ -272,22 +290,35 @@ function advanceNominatorNext(){
   const N = nominationOrder.length;
   for (let step=1; step<=N; step++){
     nominationIndex = (nominationIndex + 1) % N;
-    const id = nominationOrder[nominationIndex];
-    if (eligibleBidder(clients.get(id))) { currentNominatorId = id; return id; }
+    const pid = nominationOrder[nominationIndex];
+    if (eligibleBidder(getClientByParticipantId(pid))) { currentNominatorId = pid; return pid; }
   }
   currentNominatorId = null; return null;
 }
 
 function broadcastRoundState(){
   const names = {};
-  for (const [id,c] of clients) names[id] = c.name || 'Anonimo';
+  const online = {};
+  const regs = listParticipants();
+  for (const p of regs) {
+    names[p.id] = p.name || 'Anonimo';
+    online[p.id] = false;
+  }
+  for (const [pid, cid] of participantClients) {
+    const c = clients.get(cid);
+    if (c) {
+      names[pid] = c.name || names[pid] || 'Anonimo';
+      online[pid] = true;
+    }
+  }
   broadcast({
     type: 'round-state',
     roundMode,
     order: nominationOrder,
     current: currentNominatorId,            // alias storico
     currentNominatorId: currentNominatorId, // alias esplicito per la UI
-    names
+    names,
+    online
   });
 }
 
@@ -296,9 +327,6 @@ function skipCurrentNominator() {
     currentNominatorId = null;
     return { prev: null, next: null, changed: false, reason: 'round-inactive-or-empty' };
   }
-
-  // Ripulisci eventuali client usciti
-  nominationOrder = nominationOrder.filter(id => clients.has(id));
 
   const prev = currentNominatorId || null;
 
@@ -317,14 +345,14 @@ function skipCurrentNominator() {
   for (let step = 1; step <= N; step++) {
     nominationIndex = (nominationIndex + 1) % N;
     const candidate = nominationOrder[nominationIndex];
-    if (eligibleBidder(clients.get(candidate))) {
+    if (eligibleBidder(getClientByParticipantId(candidate))) {
       nextId = candidate;
       break;
     }
   }
 
   // Se nessuno è eleggibile, azzera
-  if (!eligibleBidder(clients.get(nextId))) {
+  if (!eligibleBidder(getClientByParticipantId(nextId))) {
     currentNominatorId = null;
     return { prev, next: null, changed: prev !== null, reason: 'no-eligible' };
   }
@@ -489,8 +517,7 @@ function endAuction(reason = 'manual') {
   // 5) Aggiorna UI utenti e (se attivo) stato round
   broadcastUsers();
   if (roundMode) {
-    const namesMap = Object.fromEntries([...clients].map(([id, c]) => [id, c.name || 'Anonimo']));
-    broadcast({ type: 'round-state', roundMode, order: nominationOrder || [], current: currentNominatorId || null, names: namesMap });
+    broadcastRoundState();
   }
 }
 
@@ -590,6 +617,7 @@ wss.on('connection', (ws) => {
 
         const c = clients.get(clientId);
         c.participantId = p.id;
+        participantClients.set(p.id, clientId);
         c.name = p.name || 'Anonimo';
         c.role = p.role || 'bidder';
         c.isHost = !!p.isHost;
@@ -618,7 +646,8 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ type: 'players-list', players }));
         sendStateToClient(c, ws);
         broadcastUsers();
-		addToRoundIfEligible(clientId);
+        addToRoundIfEligible(c.participantId);
+        broadcastRoundState();
       } catch (e) {
         try { ws.send(JSON.stringify({ type:'error', message: `Join fallita: ${e.message}` })); } catch {}
         try { ws.close(); } catch {}
@@ -658,9 +687,10 @@ wss.on('connection', (ws) => {
 	  }
 	  
 	  // idrata la sessione
-	  const c = clients.get(clientId);
-	  c.participantId = p.id;
-	  c.name = p.name || 'Anonimo';
+          const c = clients.get(clientId);
+          c.participantId = p.id;
+          participantClients.set(p.id, clientId);
+          c.name = p.name || 'Anonimo';
 	  c.role = p.role || 'bidder';
 	  c.isHost = !!p.isHost;
 
@@ -684,12 +714,13 @@ wss.on('connection', (ws) => {
 		clientId,
 		participantId: c.participantId
 	  }));
-	  ws.send(JSON.stringify({ type: 'players-list', players }));
-	  sendStateToClient(c, ws);
-	  broadcastUsers();
-	  addToRoundIfEligible(clientId);
-	  return;
-	}
+          ws.send(JSON.stringify({ type: 'players-list', players }));
+          sendStateToClient(c, ws);
+          broadcastUsers();
+          addToRoundIfEligible(c.participantId);
+          broadcastRoundState();
+          return;
+        }
 
 
     // Accesso diretto senza invito: consentito solo ai monitor con PIN
@@ -763,11 +794,11 @@ wss.on('connection', (ws) => {
 		return;
 	  }
 
-	  console.log('[WS] host:skip-nominator ricevuto. Prima di skip:', {
-		currentNominatorId,
-		currentName: currentNominatorId ? (clients.get(currentNominatorId)?.name) : null,
-		nominationOrder: nominationOrder.map(id => clients.get(id)?.name || id)
-	  });
+          console.log('[WS] host:skip-nominator ricevuto. Prima di skip:', {
+                currentNominatorId,
+                currentName: currentNominatorId ? participantName(currentNominatorId) : null,
+                nominationOrder: nominationOrder.map(id => participantName(id))
+          });
 
 	  const result = skipCurrentNominator();
 	  broadcastRoundState();
@@ -778,24 +809,24 @@ wss.on('connection', (ws) => {
 		reason: result.reason,
 		prev: result.prev,
 		next: result.next,
-		prevName: result.prev ? (clients.get(result.prev)?.name || '—') : null,
-		nextName: result.next ? (clients.get(result.next)?.name || '—') : null
-	  }));
+                prevName: result.prev ? (participantName(result.prev) || '—') : null,
+                nextName: result.next ? (participantName(result.next) || '—') : null
+          }));
 
-	  console.log('[WS] host:skip-nominator esito:', result, {
-		newCurrent: currentNominatorId,
-		newName: currentNominatorId ? (clients.get(currentNominatorId)?.name) : null
-	  });
+          console.log('[WS] host:skip-nominator esito:', result, {
+                newCurrent: currentNominatorId,
+                newName: currentNominatorId ? participantName(currentNominatorId) : null
+          });
 
 	  pushLog({
 		type: 'round-skip',
 		time: now(),
-		prev: result.prev ? (clients.get(result.prev)?.name || result.prev) : null,
-		next: result.next ? (clients.get(result.next)?.name || result.next) : null,
-		reason: result.reason
-	  });
-	  return;
-	}
+                prev: result.prev ? (participantName(result.prev) || result.prev) : null,
+                next: result.next ? (participantName(result.next) || result.next) : null,
+                reason: result.reason
+          });
+          return;
+        }
 
 	
     if (msg.type === 'host:set-budgets' && clients.get(clientId).isHost) {
@@ -814,11 +845,11 @@ wss.on('connection', (ws) => {
 		c.initialSlotsByRole = cloneSlots(defaultSlotsByRole);
 	  }
 
-	  pushLog({ type: 'budgets-set', time: now(), credits: cr, slotsByRole: defaultSlotsByRole });
-	  broadcastUsers();
-	  if (roundMode) { if (!eligibleBidder(clients.get(currentNominatorId))) pickFirstEligible(); broadcastRoundState(); }
-	  return;
-	}
+          pushLog({ type: 'budgets-set', time: now(), credits: cr, slotsByRole: defaultSlotsByRole });
+          broadcastUsers();
+          if (roundMode) { if (!eligibleBidder(getClientByParticipantId(currentNominatorId))) pickFirstEligible(); broadcastRoundState(); }
+          return;
+        }
 
 
     // Aggiorna singolo bidder (delta o set)
@@ -846,11 +877,11 @@ wss.on('connection', (ws) => {
 		}
 	  }
 
-	  pushLog({ type:'bidder-update', time: now(), target: t.name, credits: t.credits, slotsByRole: t.slotsByRole });
-	  broadcastUsers();
-	  if (roundMode) { if (!eligibleBidder(clients.get(currentNominatorId))) pickFirstEligible(); broadcastRoundState(); }
-	  return;
-	}
+          pushLog({ type:'bidder-update', time: now(), target: t.name, credits: t.credits, slotsByRole: t.slotsByRole });
+          broadcastUsers();
+          if (roundMode) { if (!eligibleBidder(getClientByParticipantId(currentNominatorId))) pickFirstEligible(); broadcastRoundState(); }
+          return;
+        }
 
 
     // Solo host
@@ -918,9 +949,28 @@ wss.on('connection', (ws) => {
       if (target) {
         try { target.ws.send(JSON.stringify({ type: 'expelled' })); } catch {}
         try { target.ws.close(); } catch {}
+        if (target.participantId) {
+          if (participantClients.get(target.participantId) === targetId) {
+            participantClients.delete(target.participantId);
+          }
+          upsertParticipant({
+            id: target.participantId,
+            name: target.name,
+            role: target.role,
+            isHost: !!target.isHost,
+            credits: Number(target.credits || 0),
+            initialCredits: Number(target.initialCredits || 0),
+            slotsByRole: cloneSlots(target.slotsByRole || {}),
+            initialSlotsByRole: cloneSlots(target.initialSlotsByRole || {})
+          });
+        }
         clients.delete(targetId);
         pushLog({ type: 'kick', time: now(), target: targetId });
         broadcastUsers();
+        if (roundMode) {
+          if (!eligibleBidder(getClientByParticipantId(currentNominatorId))) pickFirstEligible();
+          broadcastRoundState();
+        }
       }
       return;
     }
@@ -936,16 +986,14 @@ wss.on('connection', (ws) => {
 		  kicked.push(id);
 		}
 	  }
-	  if (kicked.length) pushLog({ type:'kick-anon', time: now(), ids: kicked });
-	  // ripulisci l’ordine del round robin e stato UI
-	  if (roundMode) {
-		nominationOrder = nominationOrder.filter(id => clients.has(id));
-		if (!clients.has(currentNominatorId)) pickFirstEligible();
-		broadcastRoundState();
-	  }
-	  broadcastUsers();
-	  return;
-	}
+          if (kicked.length) pushLog({ type:'kick-anon', time: now(), ids: kicked });
+          if (roundMode) {
+                if (!eligibleBidder(getClientByParticipantId(currentNominatorId))) pickFirstEligible();
+                broadcastRoundState();
+          }
+          broadcastUsers();
+          return;
+        }
 
 
 	// Il gestore chiede la lista utenti corrente (sync immediato)
@@ -978,14 +1026,14 @@ wss.on('connection', (ws) => {
 	// === Host: avvia/stop round robin (una nomina per turno) ===
 	if (msg.type === 'host:start-round' && clients.get(clientId).isHost) {
 	  const strategy = (msg.strategy === 'name') ? 'name' : 'random';
-	  nominationOrder = buildNominationOrder(strategy);
-	  roundMode = true;
-	  nominationIndex = 0;
-	  pickFirstEligible(); // sceglie il primo con slot
-	  pushLog({ type:'round-start', time: now(), strategy, order: nominationOrder.map(id=>clients.get(id)?.name||id) });
-	  broadcastRoundState();
-	  return;
-	}
+          nominationOrder = buildNominationOrder(strategy);
+          roundMode = true;
+          nominationIndex = 0;
+          pickFirstEligible(); // sceglie il primo con slot
+          pushLog({ type:'round-start', time: now(), strategy, order: nominationOrder.map(id=>participantName(id)) });
+          broadcastRoundState();
+          return;
+        }
 
 	if (msg.type === 'host:stop-round' && clients.get(clientId).isHost) {
 	  roundMode = false;
@@ -998,16 +1046,17 @@ wss.on('connection', (ws) => {
 	}
 
 	// === Bidder: nomina un giocatore (solo se è il suo turno) ===
-	if (msg.type === 'bidder:nominate') {
-	  if (!roundMode) { ws.send(JSON.stringify({ type:'error', message:'Round Robin non attivo.' })); return; }
-	  if (clientId !== currentNominatorId) { ws.send(JSON.stringify({ type:'error', message:'Non è il tuo turno per nominare.' })); return; }
-	  if (currentItem) { ws.send(JSON.stringify({ type:'error', message:'C’è già un’asta in corso.' })); return; }
+        if (msg.type === 'bidder:nominate') {
+          if (!roundMode) { ws.send(JSON.stringify({ type:'error', message:'Round Robin non attivo.' })); return; }
+          const caller = clients.get(clientId);
+          const callerPid = caller?.participantId;
+          if (callerPid !== currentNominatorId) { ws.send(JSON.stringify({ type:'error', message:'Non è il tuo turno per nominare.' })); return; }
+          if (currentItem) { ws.send(JSON.stringify({ type:'error', message:'C’è già un’asta in corso.' })); return; }
 
-	  const caller = clients.get(clientId);
-	  if (!eligibleBidder(caller)) {
-		// niente slot → salta al prossimo
-		advanceNominatorNext();
-		broadcastRoundState();
+          if (!eligibleBidder(caller)) {
+                // niente slot → salta al prossimo
+                advanceNominatorNext();
+                broadcastRoundState();
 		ws.send(JSON.stringify({ type:'error', message:'Nessuno slot rimanente.' }));
 		return;
 	  }
@@ -1088,34 +1137,32 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-	  const c = clients.get(clientId);
-	  if (c && c.participantId) {
-		// salva lo stato “vivo” del participant
-		upsertParticipant({
-		  id: c.participantId,
-		  name: c.name,
-		  role: c.role,
-		  isHost: !!c.isHost,
-		  credits: Number(c.credits || 0),
-		  initialCredits: Number(c.initialCredits || 0),
-		  slotsByRole: cloneSlots(c.slotsByRole || {}),
-		  initialSlotsByRole: cloneSlots(c.initialSlotsByRole || {})
-		});
-	  }
+          const c = clients.get(clientId);
+          if (c && c.participantId) {
+                // salva lo stato “vivo” del participant
+                upsertParticipant({
+                  id: c.participantId,
+                  name: c.name,
+                  role: c.role,
+                  isHost: !!c.isHost,
+                  credits: Number(c.credits || 0),
+                  initialCredits: Number(c.initialCredits || 0),
+                  slotsByRole: cloneSlots(c.slotsByRole || {}),
+                  initialSlotsByRole: cloneSlots(c.initialSlotsByRole || {})
+                });
+                if (participantClients.get(c.participantId) === clientId) {
+                  participantClients.delete(c.participantId);
+                }
+          }
 
-	  clients.delete(clientId);
-	  broadcastUsers();
+          clients.delete(clientId);
+          broadcastUsers();
 
-	  if (roundMode) {
-		const prevLen = nominationOrder.length;
-		nominationOrder = nominationOrder.filter(id => clients.has(id));
-		// se abbiamo rimosso il corrente, scegli il primo eleggibile
-		if (clientId === currentNominatorId || nominationOrder.length !== prevLen) {
-		  if (!eligibleBidder(clients.get(currentNominatorId))) pickFirstEligible();
-		  broadcastRoundState();
-		}
-	  }
-	});
+          if (roundMode) {
+                if (!eligibleBidder(getClientByParticipantId(currentNominatorId))) pickFirstEligible();
+                broadcastRoundState();
+          }
+        });
 });
 
 require('dotenv').config();
@@ -1164,6 +1211,13 @@ function listParticipantsWithOnline() {
   }
 
   return out;
+}
+
+function participantName(pid) {
+  const c = getClientByParticipantId(pid);
+  if (c) return c.name || 'Anonimo';
+  const p = getParticipant(pid);
+  return p?.name || 'Anonimo';
 }
 
 const INVITE_SECRET = process.env.INVITE_SECRET || 'dev-secret';
@@ -1241,6 +1295,7 @@ app.post('/host/invite/create', express.json(), (req, res) => {
         initialSlotsByRole: cloneSlots(c.initialSlotsByRole || c.slotsByRole || defaultSlotsByRole),
       });
       c.participantId = newP.id; // ↔️ linka la sessione corrente
+      participantClients.set(newP.id, participantId);
       const inv = upsertInviteForParticipant(newP.id, newP.name, newP.role);
       return res.json({ success:true, invite: inv });
     }
@@ -1272,6 +1327,7 @@ app.post('/host/invite/create', express.json(), (req, res) => {
       c.participantId = pid;
     }
 
+    participantClients.set(pid, clientId);
     const p = getParticipant(pid);
     const inv = upsertInviteForParticipant(p.id, p.name, p.role);
     return res.json({ success:true, invite: inv });
