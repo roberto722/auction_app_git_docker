@@ -7,8 +7,6 @@ const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
 
-require('dotenv').config();
-
 const HOST_PIN = process.env.HOST_PIN || '1234';
 
 const app = express();
@@ -16,30 +14,48 @@ app.set('trust proxy', 1);
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// === STATIC ===
-const PUBLIC_DIR = path.join(__dirname, 'public');
-app.use(express.static(PUBLIC_DIR));
-app.use(express.json({ limit: '2mb' }));
 
-// === LOGGING ===
-const LOG_DIR = path.join(__dirname, 'logs');
-fs.mkdirSync(LOG_DIR, { recursive: true });
-let logEntries = [];
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/health', (_req, res) => res.type('text').send('ok'));
 
-function now() { return Date.now(); }
+
+// === Upload CSV (HTTP) — versione robusta ===
+const upload = multer({ dest: 'uploads/' });
+let players = []; // [{ Nome, Ruolo?, Squadra?, ValoreBase?, Immagine? }]
+
+// === Log file (rotazione giornaliera) ===
+const LOG_DIR = process.env.LOG_DIR || path.join(process.cwd(), 'logs'); // ← usa CWD per sicurezza
+try {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+  console.log('[log] Using LOG_DIR =', LOG_DIR);
+} catch (e) {
+  console.error('[log] mkdir error:', e);
+}
+
+function addToRoundIfEligible(clientId) {
+  if (!roundMode) return false;
+  if (!clients.has(clientId)) return false;
+  const c = clients.get(clientId);
+  if (!eligibleBidder(c)) return false;
+
+  if (!nominationOrder.includes(clientId)) {
+    nominationOrder.push(clientId);           // accoda al giro corrente
+    // se non c’è nominatore attivo (o era invalido) scegli il primo valido
+    if (!currentNominatorId || !clients.has(currentNominatorId) || !eligibleBidder(clients.get(currentNominatorId))) {
+      pickFirstEligible();
+    }
+    broadcastRoundState();
+    return true;
+  }
+  return false;
+}
+
 function logFileForToday() {
   const d = new Date();
   const yyyy = d.getFullYear();
-  const mm = String(d.getMonth()+1).padStart(2,'0');
-  const dd = String(d.getDate()).padStart(2,'0');
-  return path.join(LOG_DIR, `${yyyy}-${mm}-${dd}.log`);
-}
-
-function pushLog(entry) {
-  logEntries.push(entry);
-  if (logEntries.length > 5000) logEntries.shift();
-  appendLogToFile(entry);
-  broadcast({ type: 'log-update', entries: logEntries });
+  const mm   = String(d.getMonth() + 1).padStart(2, '0');
+  const dd   = String(d.getDate()).padStart(2, '0');
+  return path.join(LOG_DIR, `auction-${yyyy}${mm}${dd}.log`);
 }
 
 function appendLogToFile(entry) {
@@ -52,26 +68,14 @@ function appendLogToFile(entry) {
   });
 }
 
-// --- Admin/status ---
-app.get('/status', (req,res)=>{
-  if (!isHostReq(req)) return res.status(403).json({ ok:false });
-  const nowTs = Date.now();
-  res.json({
-    ok:true,
-    clients: Array.from(presence, ([id,p])=>({ id, name:p.name||'Anonimo', participantId:p.participantId||null, isHost:!!p.isHost, online: nowTs - (p.lastSeen||0) < STALE_CLIENT_MS, lastSeen: p.lastSeen||0 })),
-    auction: { paused: auctionPaused, reason: auctionPauseReason, currentItem: currentItem ? currentItem.name || currentItem.id || true : null, currentPrice }
-  });
-});
-app.get('/healthz', (_req,res)=>res.json({ ok:true, ts:Date.now(), wsClients: wss.clients.size }));
-
 // --- Scarica il log di oggi ---
 app.get('/logs/today', (req, res) => {
   try {
     const file = logFileForToday();
-    if (!fs.existsSync(file)) return res.status(404).type('text').send('Nessun log per oggi.');
-    res.download(file, path.basename(file));
+    if (!fs.existsSync(file)) return res.status(404).type('text').send('Nessun log per oggi');
+    res.download(file, path.basename(file)); // forza download
   } catch (e) {
-    res.status(500).type('text').send(e.message || 'Errore');
+    res.status(500).type('text').send('Errore download log: ' + e.message);
   }
 });
 
@@ -97,252 +101,57 @@ app.get('/logs/file/:name', (req, res) => {
   res.download(file, name);
 });
 
-// === UPLOAD CSV ===
-const MAX_CSV_SIZE = 1024 * 1024; // 1MB
-const upload = multer({
-  dest: path.join(__dirname, 'uploads'),
-  limits: { fileSize: MAX_CSV_SIZE }
-});
-
-app.post('/upload-players', (req, res) => {
-  upload.single('file')(req, res, (err) => {
-    if (err) {
-      if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).json({ success:false, error: 'File troppo grande' });
-      }
-      return res.status(400).json({ success:false, error: err.message });
-    }
-
-    if (!req.file) return res.status(400).json({ success:false, error:'Nessun file' });
-
-    const rows = [];
-    const requiredHeaders = ['name', 'role', 'team', 'image'];
-    fs.createReadStream(req.file.path)
-      .pipe(csv({ headers: false }))
-      .on('data', (row) => rows.push(row))
-      .on('end', () => {
-        try {
-          if (!rows.length) throw new Error('File CSV vuoto');
-
-          const normalize = (v) => String(v || '').replace(/^\uFEFF/, '').trim().toLowerCase();
-          const headerRow = rows[0].map(normalize);
-          const hasHeaders = requiredHeaders.every(h => headerRow.includes(h));
-
-          let list = [];
-          if (hasHeaders) {
-            const idx = {};
-            headerRow.forEach((h, i) => { idx[h] = i; });
-            list = rows.slice(1).map(r => ({
-              name: String(r[idx.name] || '').trim(),
-              role: String(r[idx.role] || '').trim(),
-              team: String(r[idx.team] || '').trim(),
-              image: String(r[idx.image] || '').trim() || null
-            })).filter(x => x.name);
-          } else {
-            const MAP = { P:'Portiere', D:'Difensore', C:'Centrocampista', A:'Attaccante' };
-            list = rows.map(r => {
-              const name = String(r[1] ?? '').trim();
-              const roleCode = String(r[3] ?? '').trim().toUpperCase().slice(0,1);
-              const role = MAP[roleCode] || '';
-              const team = String(r[9] ?? '').trim();
-              const image = String(r[15] ?? '').trim() || null;
-              return { name, role, team, image };
-            }).filter(x => x.name);
-          }
-
-          if (!list.length) throw new Error('Formato CSV non riconosciuto o nessun giocatore valido');
-
-          players = list;
-          broadcast({ type:'players-list', players });
-          pushLog({ type:'players-uploaded', time: now(), count: players.length });
-          fs.unlink(req.file.path, () => {});
-          res.json({ success:true, count: players.length, players });
-        } catch (e) {
-          fs.unlink(req.file.path, () => {});
-          res.status(400).json({ success:false, error: e.message });
-        }
-      })
-      .on('error', (err) => {
-        fs.unlink(req.file.path, () => {});
-        res.status(400).json({ success:false, error: String(err.message || err) });
-      });
-  });
-});
-
-// === INVITES (semplici) ===
-const INVITES_FILE = path.join(__dirname, 'data', 'invites.json');
-fs.mkdirSync(path.dirname(INVITES_FILE), { recursive: true });
-function loadInvites(){ try{ return JSON.parse(fs.readFileSync(INVITES_FILE,'utf-8')); }catch{ return []; } }
-function saveInvites(arr){ fs.writeFileSync(INVITES_FILE, JSON.stringify(arr, null, 2)); }
-
-function isHostReq(req) {
-  const ip = req.ip || '';
-  const host = (req.hostname || '').toLowerCase();
-  const loop = ['127.0.0.1','::1','localhost'];
-  return loop.includes(host) || loop.includes(ip);
+// Rimuove BOM/spazi dagli header
+function normalizeKeys(obj) {
+  const out = {};
+  for (const k in obj) out[k.replace(/^\uFEFF/, '').trim()] = obj[k];
+  return out;
 }
 
-app.get('/join/by-token/:token', (req, res) => {
-  const { token } = req.params;
-  const inv = loadInvites().find(x => x.token === String(token) && !x.revoked);
-  if (!inv) return res.status(404).type('text').send('Token non valido o revocato.');
-  const html = `<!doctype html>
-  <meta charset="utf-8">
-  <title>Join</title>
-  <script>
-    localStorage.setItem('inviteToken', ${JSON.stringify(inv.token)});
-    location.href = '/';
-  </script>`;
-  res.type('html').send(html);
+// Rende omogenea una riga del CSV (accetta varianti di header)
+function canonicalRow(row) {
+  const r = normalizeKeys(row);
+
+  const Nome    = (r.Nome ?? r.nome ?? r.NOME ?? r.Player ?? r.Giocatore ?? '').toString().trim();
+  const Ruolo   = (r.Ruolo ?? r.ruolo ?? r.Role ?? '').toString().trim();
+  const Squadra = (r.Squadra ?? r.squadra ?? r.Team ?? '').toString().trim();
+  const VBraw   = (r.ValoreBase ?? r['Valore Base'] ?? r.Base ?? r.base ?? 0);
+  const ValoreBase = Number.parseInt(String(VBraw).replace(',', '.'), 10) || 0;
+
+  // 👇 prende la colonna immagine così com’è (può essere /players/xxx.jpg o http/https)
+  const Immagine = (r.Immagine ?? r.Image ?? r.Foto ?? r.Photo ?? r.img ?? r.image ?? '').toString().trim();
+
+  return { Nome, Ruolo, Squadra, ValoreBase, Immagine };
+}
+
+
+app.post('/upload', upload.single('csv'), (req, res) => {
+  const tmp = [];
+  fs.createReadStream(req.file.path)
+    .pipe(csv()) // usiamo csv-parser; normalizziamo noi le chiavi
+    .on('data', (rawRow) => {
+      try {
+        const p = canonicalRow(rawRow);
+        if (p.Nome) tmp.push(p); // scarta righe senza nome
+      } catch { /* ignora righe malformate */ }
+    })
+    .on('end', () => {
+      try { fs.unlinkSync(req.file.path); } catch {}
+      players = tmp;
+      if (players[0]) console.log('[CSV] Prima riga normalizzata:', players[0]);
+      broadcast({ type: 'players-list', players }); // invia al frontend
+      res.json({ success: true, players });
+    })
+    .on('error', (err) => {
+      try { fs.unlinkSync(req.file.path); } catch {}
+      res.status(400).json({ success: false, error: String(err) });
+    });
 });
 
-app.post('/host/invite/create', (req, res) => {
-  if (!isHostReq(req)) return res.status(403).json({ success:false });
-
-  const { name, role, participantId, clientId } = req.body || {};
-  const list = loadInvites();
-
-  const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  const inv = {
-    id: 'inv_' + Math.random().toString(36).slice(2, 10),
-    token,
-    name: (name || '').trim() || null,
-    role: role || 'bidder',
-    participantId: participantId || null,
-    clientId: clientId || null,
-    createdAt: now(),
-    revoked: false
-  };
-
-  list.push(inv);
-  saveInvites(list);
-  // mantieni il vecchio 'token' per retrocompatibilità, ma aggiungi anche 'invite'
-  res.json({ success: true, token, invite: inv });
-});
-
-
-app.get('/host/invite/list', (req, res) => {
-  if (!isHostReq(req)) return res.status(403).json({ success:false });
-  res.json({ success:true, invites: loadInvites() });
-});
-
-app.post('/host/invite/rotate', (req, res) => {
-  if (!isHostReq(req)) return res.status(403).json({ success:false });
-  const { id, token } = req.body || {};
-  const list = loadInvites();
-  const inv = list.find(x => x.token === token || x.id === id);
-  if (!inv) return res.json({ success:false, error:'not-found' });
-
-  inv.token = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  saveInvites(list);
-  res.json({ success:true, token: inv.token, invite: inv });
-});
-
-
-app.post('/host/invite/revoke', (req, res) => {
-  if (!isHostReq(req)) return res.status(403).json({ success:false });
-  const { token } = req.body || {};
-  const list = loadInvites();
-  const inv = list.find(x => x.token === token);
-  if (!inv) return res.json({ success:false, error:'not-found' });
-  inv.revoked = true; saveInvites(list);
-  res.json({ success:true });
-});
-
-// === REGISTRY (persistenza partecipanti) ===
-const { v4: uuid } = require('uuid');
-const { sign, verify } = require('./lib/token');
-const { getParticipant, upsertParticipant, deleteParticipant, listParticipants } = require('./lib/registry');
-
-const INVITE_SECRET = process.env.INVITE_SECRET || 'change-me';
-
-// Stato utente/asta runtime
-const clients = new Map(); // id -> { ws, name, role: 'host'|'bidder'|'monitor', isHost, credits, slotsByRole, ... }
-
-// === Presence / Heartbeat / Rate-limit / Pause ===
-const HEARTBEAT_INTERVAL_MS = 10_000;
-const STALE_CLIENT_MS = 30_000;
-const RATE_WINDOW_MS = 3_000;
-const MAX_OFFERS_PER_WINDOW = 5;
-
-const presence = new Map(); // clientId -> { lastSeen, name, participantId, isHost }
-const offerHistory = new Map(); // participantId -> [timestamps]
-
-function markPresence(clientId, patch = {}) {
-  const cur = presence.get(clientId) || {};
-  const next = { lastSeen: Date.now(), ...cur, ...patch };
-  presence.set(clientId, next);
-  broadcastPresence();
-}
-
-function broadcastPresence() {
-  const nowTs = Date.now();
-  const list = Array.from(presence, ([id, p]) => ({
-    id,
-    name: p.name || 'Anonimo',
-    isHost: !!p.isHost,
-    participantId: p.participantId || null,
-    online: nowTs - (p.lastSeen || 0) < STALE_CLIENT_MS
-  }));
-  try { broadcast({ type: 'presence:update', list }); } catch {}
-}
-
-function onlineParticipants() {
-  const nowTs = Date.now();
-  return Array.from(presence.values())
-    .filter(p => p.participantId && (nowTs - (p.lastSeen || 0) < STALE_CLIENT_MS))
-    .map(p => p.participantId);
-}
-
-function allowOffer(participantId, currentAmount, amount) {
-  const nowTs = Date.now();
-  const arr = (offerHistory.get(participantId) || []).filter(t => nowTs - t < RATE_WINDOW_MS);
-  if (arr.length >= MAX_OFFERS_PER_WINDOW) return { ok:false, reason:'rate_limited' };
-  if (amount === currentAmount && arr.length && nowTs - arr[arr.length-1] < 1000)
-    return { ok:false, reason:'duplicate_amount' };
-  arr.push(nowTs);
-  offerHistory.set(participantId, arr);
-  return { ok:true };
-}
-
-// Pausa automatica
-let auctionPaused = false;
-let auctionPauseReason = null;
-function setPaused(flag, reason=null) {
-  if (auctionPaused === flag && auctionPauseReason === reason) return;
-  auctionPaused = flag; auctionPauseReason = reason;
-  broadcast({ type:'auction:pause', paused: flag, reason });
-}
-function reevaluatePause() {
-  if (!currentItem) { setPaused(false, null); return; }
-  const online = onlineParticipants();
-  if (currentBidderId && !online.includes(currentBidderId)) {
-    setPaused(true, 'highest_bidder_offline'); return;
-  }
-  if (currentNominatorId && !online.includes(currentNominatorId)) {
-    setPaused(true, 'nominator_offline'); return;
-  }
-  setPaused(false, null);
-}
-
-// Sweep offline clients from presence map and reevaluate pause
-setInterval(() => {
-  const nowTs = Date.now();
-  for (const [id, p] of presence) {
-    if (nowTs - (p.lastSeen || 0) >= STALE_CLIENT_MS) {
-      // keep presence entry but mark as offline via broadcastPresence()
-    }
-  }
-  broadcastPresence();
-  reevaluatePause();
-}, 5000);
-
-let players = [];
-
-// === Round robin & asta state ===
-let roundMode = false; // false|'random'|'name'
-let nominationOrder = [];
-let nominationIndex = -1;
+// === Round Robin (1 nomina per turno) ===
+let roundMode = false;
+let nominationOrder = [];      // array di clientId
+let nominationIndex = 0;       // indice corrente dentro nominationOrder
 let currentNominatorId = null; // id a cui “tocca”
 
 function eligibleBidder(c){
@@ -374,26 +183,16 @@ function pickFirstEligible(){
   currentNominatorId = null; return null;
 }
 
-function advanceNominator(){
-  if (!roundMode || nominationOrder.length===0) { currentNominatorId = null; return { prev:null, next:null, changed:false, reason:'wrong-state' }; }
-  const prev = currentNominatorId;
+// passa al prossimo eleggibile (una nomina per turno)
+function advanceNominatorNext(){
+  if (!roundMode || nominationOrder.length===0) { currentNominatorId=null; return null; }
   const N = nominationOrder.length;
-  if (N === 0) {
-    currentNominatorId = null;
-    return { prev, next: null, changed: false, reason: 'empty-order' };
-  }
-  let nextId = prev;
-  for (let step = 1; step <= N; step++) {
+  for (let step=1; step<=N; step++){
     nominationIndex = (nominationIndex + 1) % N;
-    const candidate = nominationOrder[nominationIndex];
-    if (eligibleBidder(clients.get(candidate))) {
-      nextId = candidate;
-      break;
-    }
+    const id = nominationOrder[nominationIndex];
+    if (eligibleBidder(clients.get(id))) { currentNominatorId = id; return id; }
   }
-  if (nextId === prev) return { prev, next: prev, changed: false, reason:'no-eligible' };
-  currentNominatorId = nextId;
-  return { prev, next: nextId, changed:true };
+  currentNominatorId = null; return null;
 }
 
 function broadcastRoundState(){
@@ -403,23 +202,115 @@ function broadcastRoundState(){
     type: 'round-state',
     roundMode,
     order: nominationOrder,
-    current: currentNominatorId,
-    currentNominatorId,
+    current: currentNominatorId,            // alias storico
+    currentNominatorId: currentNominatorId, // alias esplicito per la UI
     names
   });
 }
 
-// === Asta ===
-let baseCountdownSeconds = 20;
-let currentItem = null;
-let currentPrice = 0;
-let currentBidder = null;   // nome (legacy)
-let currentBidderId = null; // id client
-let bidHistory = [];
-let timerHandle = null;
+function skipCurrentNominator() {
+  if (!roundMode || nominationOrder.length === 0) {
+    currentNominatorId = null;
+    return { prev: null, next: null, changed: false, reason: 'round-inactive-or-empty' };
+  }
 
-function lastNBids(n=3){
-  return bidHistory.slice(-n).map(x=>({ name:x.name, amount:x.amount }));
+  // Ripulisci eventuali client usciti
+  nominationOrder = nominationOrder.filter(id => clients.has(id));
+
+  const prev = currentNominatorId || null;
+
+  // Riallinea l'indice al current se presente
+  const idx = prev ? nominationOrder.indexOf(prev) : -1;
+  if (idx >= 0) nominationIndex = idx;
+
+  const N = nominationOrder.length;
+  if (N === 0) {
+    currentNominatorId = null;
+    return { prev, next: null, changed: false, reason: 'empty-after-clean' };
+  }
+
+  // Avanza finché trovi un eleggibile diverso dal precedente (max N tentativi)
+  let nextId = prev;
+  for (let step = 1; step <= N; step++) {
+    nominationIndex = (nominationIndex + 1) % N;
+    const candidate = nominationOrder[nominationIndex];
+    if (eligibleBidder(clients.get(candidate))) {
+      nextId = candidate;
+      break;
+    }
+  }
+
+  // Se nessuno è eleggibile, azzera
+  if (!eligibleBidder(clients.get(nextId))) {
+    currentNominatorId = null;
+    return { prev, next: null, changed: prev !== null, reason: 'no-eligible' };
+  }
+
+  currentNominatorId = nextId;
+  return { prev, next: nextId, changed: prev !== nextId, reason: 'ok' };
+}
+
+
+// === Stato asta (single room) ===
+const clients = new Map(); // id -> { ws, name, role: 'host'|'bidder'|'monitor', isHost, credits, slots }
+let currentItem = null;   // { name, startPrice, role?, team?, image? }
+let currentPrice = 0;
+let currentBidder = null; // nome
+let minIncrement = 1;
+let timerHandle = null;
+let logEntries = [];      // [{type,time,...}]
+let bidHistory = [];      // [{t, name, amount}]
+
+let baseCountdownSeconds = 12; // impostazione del gestore (esposta in UI)
+
+function dynamicSecondsFor(price) {
+  const b = Math.max(5, baseCountdownSeconds); // difesa minima
+  let factor = 1.0;
+  if (price >= 200)      factor = 0.60; // -40%
+  else if (price >= 150) factor = 0.70; // -30%
+  else if (price >= 100) factor = 0.80; // -20%
+  const secs = Math.max(3, Math.round(b * factor)); // non scendere mai sotto 3s
+  return secs;
+}
+
+
+// Budget/slot configurabili dal gestore
+let defaultCredits = 0;
+let defaultSlotsByRole = { por: 3, dif: 8, cen: 8, att: 6 }; // POR, DIF, CEN, ATT
+
+function cloneSlots(o){ return { por:o.por||0, dif:o.dif||0, cen:o.cen||0, att:o.att||0 }; }
+function ensureBudgetFields(c) {
+  if (c.credits == null) c.credits = defaultCredits;
+  if (!c.slotsByRole)        c.slotsByRole        = cloneSlots(defaultSlotsByRole);
+  if (c.initialCredits == null) c.initialCredits  = defaultCredits;
+  if (!c.initialSlotsByRole)    c.initialSlotsByRole = cloneSlots(defaultSlotsByRole);
+}
+
+function roleKeyFromText(t=''){
+  const r = String(t).toLowerCase();
+  if (r.includes('port') || r.startsWith('por')) return 'por';
+  if (r.includes('dif')  || r.startsWith('dif')) return 'dif';
+  if (r.includes('cent') || r.startsWith('cen')) return 'cen';
+  if (r.includes('att')  || r.startsWith('att')) return 'att';
+  return null;
+}
+function totalSlotsRemaining(slotsByRole){
+  const s = slotsByRole || {};
+  return (s.por||0)+(s.dif||0)+(s.cen||0)+(s.att||0);
+}
+
+function now() { return Date.now(); }
+function lastNBids(n=3){ return bidHistory.slice(-n); }
+
+function pushLog(entry) {
+	console.log('[LOG]', entry);  
+  logEntries.push(entry);
+  appendLogToFile(entry);
+  for (const [, c] of clients) {
+    if (c.isHost && c.ws.readyState === WebSocket.OPEN) {
+      c.ws.send(JSON.stringify({ type: 'log-update', entries: logEntries }));
+    }
+  }
 }
 
 function broadcast(msg) {
@@ -435,13 +326,13 @@ function broadcastUsers() {
     ensureBudgetFields(c);
     users.push({
       id,
-      name: c.name || 'Anonimo',
+      name: c.name,
+      isHost: c.isHost,
       role: c.role || 'bidder',
-      isHost: !!c.isHost,
-      credits: Number(c.credits || 0),
-      initialCredits: Number(c.initialCredits || 0),
-      slotsByRole: { ...(c.slotsByRole||{}) },
-      initialSlotsByRole: { ...(c.initialSlotsByRole||{}) }
+      credits: c.credits ?? 0,
+      initialCredits: c.initialCredits ?? 0,
+      slotsByRole: cloneSlots(c.slotsByRole || {}),
+      initialSlotsByRole: cloneSlots(c.initialSlotsByRole || {})
     });
   }
   broadcast({ type: 'user-list', users });
@@ -454,10 +345,12 @@ function startTimer(secs) {
 }
 
 function resetTimer() {
+  // ricalcola in base al prezzo corrente
   const secs = dynamicSecondsFor(currentPrice || Number(currentItem?.startPrice || 0) || 0);
   startTimer(secs);
   broadcast({ type: 'reset-timer', seconds: secs });
 }
+
 
 function endAuction(reason = 'manual') {
   if (!currentItem) return;
@@ -471,20 +364,18 @@ function endAuction(reason = 'manual') {
   } else if (currentBidder) {
     // fallback legacy: cerca per nome (non affidabile con omonimi, ma compat)
     for (const [id, c] of clients) {
-      if ((c.name||'').trim() === (currentBidder||'').trim()) { winnerId = id; break; }
+      if (c.name === currentBidder) { winnerId = id; break; }
     }
   }
 
-  // 2) Se abbiamo un vincitore rispetta budget/slot
-  let winnerName = null;
-  const amount = currentPrice;
-  if (winnerId && clients.has(winnerId)) {
-    const w = clients.get(winnerId);
-    winnerName = w.name || '—';
+  const winnerName = winnerId ? (clients.get(winnerId)?.name || 'Nessuno') : 'Nessuno';
+  const amount = currentPrice || Number(currentItem.startPrice || 0) || 0;
 
-    // decurtazione budget e slot solo se c'è un item con ruolo
-    const rkey = roleKeyFromText(currentItem?.role || '');
-    if (rkey) {
+  // 2) Detrae budget/slot se abbiamo un vincitore e il ruolo è valido
+  const rkey = roleKeyFromText(currentItem?.role || '');
+  if (winnerId && rkey) {
+    const w = clients.get(winnerId);
+    if (w) {
       ensureBudgetFields(w);
       w.credits = Math.max(0, (w.credits || 0) - amount);
       w.slotsByRole[rkey] = Math.max(0, (w.slotsByRole[rkey] || 0) - 1);
@@ -498,6 +389,7 @@ function endAuction(reason = 'manual') {
     winner: winnerName,
     amount,
     last3: lastNBids(3)
+    // bidderId: winnerId, // <-- opzionale se vuoi inviarlo alla UI
   });
   pushLog({ type: 'auction-end', time: now(), item: currentItem, winner: winnerName, amount, reason });
 
@@ -517,6 +409,9 @@ function endAuction(reason = 'manual') {
   }
 }
 
+
+
+
 function sendStateToClient(client, wsRef) {
   ensureBudgetFields(client);
   const secondsEstimate = currentItem
@@ -526,70 +421,46 @@ function sendStateToClient(client, wsRef) {
   const payloadCommon = {
     type: 'state',
     countdownSeconds: baseCountdownSeconds, 
-    players,
-
-    // round
-    round: { mode: roundMode, order: nominationOrder, current: currentNominatorId },
-
-    // asta
-    currentItem, currentPrice,
-    currentBidder, last3: lastNBids(3),
-    secondsEstimate
+    seconds: secondsEstimate,                
+    price: currentPrice,
+    bidder: currentBidder,
+    last3: lastNBids ? lastNBids(3) : [],
+    roundMode, nominationOrder, currentNominatorId
   };
 
-  wsRef.send(JSON.stringify({
-    ...payloadCommon,
-    you: {
-      id: [...clients].find(([k,v]) => v === client)?.[0] || null,
+  if (client.role === 'host' || client.role === 'monitor') {
+    wsRef.send(JSON.stringify({ ...payloadCommon, item: currentItem || null }));
+  } else {
+    wsRef.send(JSON.stringify({ ...payloadCommon, playerName: currentItem ? currentItem.name : null }));
+  }
+}
 
-      participantId: client.participantId || null,
-
-      name: client.name || 'Anonimo',
-      role: client.role || 'bidder',
-      isHost: !!client.isHost,
-
-      credits: Number(client.credits || 0),
-      initialCredits: Number(client.initialCredits || 0),
-      slotsByRole: { ...(client.slotsByRole||{}) },
-      initialSlotsByRole: { ...(client.initialSlotsByRole||{}) }
+function broadcastAuctionStartedTailoredWithSeconds(secs){
+  for (const [, c] of clients) {
+    if (c.ws.readyState !== 1) continue;
+    if (c.role === 'host' || c.role === 'monitor') {
+      c.ws.send(JSON.stringify({
+        type: 'auction-started',
+        item: currentItem,
+        seconds: secs,
+        price: currentPrice,
+        bidder: currentBidder,
+        last3: []
+      }));
+    } else {
+      c.ws.send(JSON.stringify({
+        type: 'auction-started',
+        playerName: currentItem?.name || '—',
+        seconds: secs,
+        price: currentPrice,
+        bidder: currentBidder,
+        last3: []
+      }));
     }
-  }));
+  }
 }
 
-function roleKeyFromText(t=''){
-  const r = String(t).toLowerCase();
-  if (r.includes('port') || r.startsWith('por')) return 'por';
-  if (r.includes('dif')  || r.startsWith('dif')) return 'dif';
-  if (r.includes('cent') || r.startsWith('cen')) return 'cen';
-  if (r.includes('att')  || r.startsWith('att')) return 'att';
-  return null;
-}
-function cloneSlots(o){ return { por:o.por||0, dif:o.dif||0, cen:o.cen||0, att:o.att||0 }; }
-function ensureBudgetFields(c) {
-  if (c.credits == null) c.credits = defaultCredits;
-  if (!c.slotsByRole)        c.slotsByRole        = cloneSlots(defaultSlotsByRole);
-  if (c.initialCredits == null) c.initialCredits  = defaultCredits;
-  if (!c.initialSlotsByRole)    c.initialSlotsByRole = cloneSlots(defaultSlotsByRole);
-}
-function totalSlotsRemaining(slotsByRole){
-  const s = slotsByRole || {};
-  return (s.por||0)+(s.dif||0)+(s.cen||0)+(s.att||0);
-}
-
-let defaultCredits = 0;
-let defaultSlotsByRole = { por: 3, dif: 8, cen: 8, att: 6 };
-
-function dynamicSecondsFor(price){
-  const b = baseCountdownSeconds;
-  let factor = 1.0;
-  if (price >= 200) factor = 0.60; // -40%
-  else if (price >= 150) factor = 0.70; // -30%
-  else if (price >= 100) factor = 0.80; // -20%
-  const secs = Math.max(3, Math.round(b * factor));
-  return secs;
-}
-
-// Ping server → chiudi zombie, ogni 30s per tutti i client
+// Heartbeat globale: gira una volta ogni 30s per tutti i client
 setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) return ws.terminate();
@@ -597,6 +468,8 @@ setInterval(() => {
     try { ws.ping(); } catch {}
   });
 }, 30000);
+
+let currentBidderId = null;
 
 // === WebSocket ===
 wss.on('connection', (ws) => {
@@ -617,67 +490,14 @@ wss.on('connection', (ws) => {
   ws.isAlive = true;
   ws.on('pong', function() { this.isAlive = true; });
 
-  // Presence initial mark
-  const c0 = clients.get(clientId);
-  markPresence(clientId, { name: c0?.name, participantId: c0?.participantId, isHost: !!c0?.isHost });
-
   ws.on('message', (raw) => {
 	  let msg; try { msg = JSON.parse(raw); } catch { return; }
 	  if (msg && msg.type === 'ping') {
 		ws.send(JSON.stringify({ type: 'pong', t: msg.t }));
 		return;
 	  }
-	  
-  if (msg.type === 'hb') {
-    markPresence(clientId);
-    try { ws.send(JSON.stringify({ type:'hb:ack', t: Date.now() })); } catch {}
-    return;
-  }
-  if (msg.type === 'client:hello') {
-    const { name, participantId, isHost } = msg;
-    const c = clients.get(clientId);
-    if (c) { c.name = name || c.name; c.participantId = participantId || c.participantId; c.isHost = !!isHost; }
-    markPresence(clientId, { name: c?.name, participantId: c?.participantId, isHost: !!c?.isHost });
-    return;
-  }
-  if (msg.type === 'resume' && msg.sessionToken) {
-    // Bind token to client session (no persistent store here; extend as needed)
-    const c = clients.get(clientId);
-    if (c) c.sessionToken = String(msg.sessionToken);
-    // Re-send full state
-    try { sendStateToClient(c, ws); } catch {}
-    markPresence(clientId, { name: c?.name, participantId: c?.participantId, isHost: !!c?.isHost });
-    return;
-  }
-  if (msg.type === 'host:rollcall') {
-    const online = onlineParticipants();
-    const all = (listParticipants && typeof listParticipants==='function') ? listParticipants().map(p=>p.id) : online;
-    const missing = all.filter(id => !online.includes(id));
-    try { ws.send(JSON.stringify({ type:'rollcall:result', online, missing })); } catch {}
-    return;
-  }
 		
-	
-  // === Join "semplice" senza token (name + role) ===
-  if (msg.type === 'join' && !msg.token) {
-    const name = (typeof msg.name === 'string' && msg.name.trim()) ? msg.name.trim() : 'Anonimo';
-    const role = (msg.role === 'monitor') ? 'monitor' : 'bidder';
-    const c = clients.get(clientId);
-    if (c) {
-      c.name = name;
-      c.role = role;
-      c.isHost = false;
-      ensureBudgetFields(c);
-    }
-    try { ws.send(JSON.stringify({ type:'joined', success:true, name: name, role: role, clientId })); } catch {}
-    try { ws.send(JSON.stringify({ type:'players-list', players })); } catch {}
-    try { sendStateToClient(c, ws); } catch {}
-    broadcastUsers();
-    markPresence(clientId, { name, participantId: c?.participantId, isHost: !!c?.isHost });
-    if (role === 'bidder') addToRoundIfEligible(clientId);
-    return;
-  }
-if (msg.type === 'join' && msg.token) {
+	if (msg.type === 'join' && msg.token) {
       try {
         const payload = verify(msg.token, INVITE_SECRET); // { pid, role, iat, exp }
         const p = getParticipant(payload.pid);
@@ -688,12 +508,9 @@ if (msg.type === 'join' && msg.token) {
         c.name = p.name || 'Anonimo';
         c.role = p.role || 'bidder';
         c.isHost = !!p.isHost;
-  const sessionToken = Math.random().toString(36).slice(2)+Date.now().toString(36);
-  c.sessionToken = sessionToken;
-  try { ws.send(JSON.stringify({ type:'resume:token', sessionToken, participantId: c.participantId, name: c.name })); } catch {}
-  markPresence(clientId, { name: c.name, participantId: c.participantId, isHost: !!c.isHost });
 
-        ensureBudgetFields(c);
+        // Idrata budget/slot dai dati persistiti (o fallback ai default)
+        ensureBudgetFields(c); // mantiene la tua logica, ma prima proviamo con i valori del participant
         if (Number.isFinite(p.credits)) {
           c.credits = p.credits;
           c.initialCredits = Number.isFinite(p.initialCredits) ? p.initialCredits : p.credits;
@@ -702,12 +519,20 @@ if (msg.type === 'join' && msg.token) {
           c.slotsByRole = cloneSlots(p.slotsByRole);
           c.initialSlotsByRole = cloneSlots(p.initialSlotsByRole || p.slotsByRole);
         }
-        ensureBudgetFields(c);
+        ensureBudgetFields(c); // garantisce che nulla resti null
 
-        ws.send(JSON.stringify({ type:'joined', success:true, name:c.name, role:c.role, clientId }));
-        ws.send(JSON.stringify({ type:'players-list', players }));
+        // Rispondi come al solito (+ participantId)
+        ws.send(JSON.stringify({
+          type: 'joined',
+          success: true,
+          name: c.name,
+          role: c.role,
+          clientId,                 // id sessione
+          participantId: c.participantId  // id stabile
+        }));
+        ws.send(JSON.stringify({ type: 'players-list', players }));
         sendStateToClient(c, ws);
-        broadcastUsers(); markPresence(clientId, { name: c.name, participantId: c.participantId, isHost: !!c.isHost });
+        broadcastUsers();
 		addToRoundIfEligible(clientId);
       } catch (e) {
         try { ws.send(JSON.stringify({ type:'error', message: `Join fallita: ${e.message}` })); } catch {}
@@ -738,8 +563,8 @@ if (msg.type === 'join' && msg.token) {
 		p = upsertParticipant({
 		  id: inv.participantId,
 		  name: inv.name || 'Ospite',
-		  role: 'bidder',
-		  isHost: false,
+		  role: inv.role || 'bidder',
+		  isHost: inv.role === 'host',
 		  credits: defaultCredits ?? 0,
 		  initialCredits: defaultCredits ?? 0,
 		  slotsByRole: cloneSlots(defaultSlotsByRole),
@@ -766,213 +591,398 @@ if (msg.type === 'join' && msg.token) {
 	  }
 	  ensureBudgetFields(c);
 
-// ---- resume token for reconnection ----
-	  const sessionToken = Math.random().toString(36).slice(2)+Date.now().toString(36);
-	  const cc = clients.get(clientId); if (cc) cc.sessionToken = sessionToken;
-	  try { ws.send(JSON.stringify({ type:'resume:token', sessionToken, participantId: cc?.participantId, name: cc?.name })); } catch {}
-
 	  ws.send(JSON.stringify({
-			type: 'joined',
-			success: true,
-			name: c.name,
-			role: c.role,
-			clientId
+		type: 'joined',
+		success: true,
+		name: c.name,
+		role: c.role,
+		clientId,
+		participantId: c.participantId
 	  }));
-	  ws.send(JSON.stringify({ type:'players-list', players }));
+	  ws.send(JSON.stringify({ type: 'players-list', players }));
 	  sendStateToClient(c, ws);
-	  broadcastUsers(); markPresence(clientId, { name: c.name, participantId: c.participantId, isHost: !!c.isHost });
+	  broadcastUsers();
 	  addToRoundIfEligible(clientId);
 	  return;
 	}
 
-    // Join “semplice” con nome/ruolo
-    if (msg.type === 'join-simple') {
-      const { name, role } = msg;
-      if (!name || !role) { ws.send(JSON.stringify({ type:'error', message:'Nome/ruolo mancanti' })); return; }
+
+    // Utente normale / monitor (senza PIN). role opzionale: 'bidder' (default) o 'monitor'
+    if (msg.type === 'join') {
+      const name = (msg.name || 'Anonimo').trim();
+      const role = (msg.role === 'monitor') ? 'monitor' : 'bidder';
+
       const c = clients.get(clientId);
       c.name = name;
       c.role = role;
       ensureBudgetFields(c);
 
       ws.send(JSON.stringify({ type: 'joined', success: true, name, role, clientId }));
-      { const sessionToken = Math.random().toString(36).slice(2)+Date.now().toString(36); const cc=clients.get(clientId); if (cc) cc.sessionToken=sessionToken; try{ ws.send(JSON.stringify({ type:'resume:token', sessionToken, participantId: cc?.participantId, name: cc?.name||name })); }catch{} }
       ws.send(JSON.stringify({ type: 'players-list', players }));
       sendStateToClient(c, ws);
-      broadcastUsers(); markPresence(clientId, { name: c.name, participantId: c.participantId, isHost: !!c.isHost });
+      broadcastUsers();
 	  addToRoundIfEligible(clientId);
       return;
     }
 
     // Gestore (con PIN)
-	if (msg.type === 'host-login') {
-	  if (String(msg.pin) !== String(HOST_PIN)) {
-		// Notifica specifica per la UI dell'host
-		try { ws.send(JSON.stringify({ type: 'host-auth', success: false })); } catch {}
-		return;
+    if (msg.type === 'host-login') {
+	  const ok = String(msg.pin) === HOST_PIN;
+	  const c = clients.get(clientId);
+
+	  if (ok) { 
+		c.isHost = true; 
+		c.role = 'host'; 
+		ws.send(JSON.stringify({ type: 'host-auth', success: true, clientId }));
+		ws.send(JSON.stringify({ type: 'log-update', entries: logEntries }));
+		ws.send(JSON.stringify({ type: 'players-list', players }));
+		sendStateToClient(c, ws);
+	  } else {
+		ws.send(JSON.stringify({ type: 'host-auth', success: false }));
 	  }
 
-	  const c = clients.get(clientId);
-	  c.isHost = true;
-	  c.role = 'host';
-	  c.name = 'Gestore';
-
-	  // Messaggio atteso dal frontend per chiudere la login e mostrare la UI host
-	  try { ws.send(JSON.stringify({ type: 'host-auth', success: true, clientId })); } catch {}
-
-	  // Invariato: idrata subito la UI con dati utili
-	  try { ws.send(JSON.stringify({ type: 'players-list', players })); } catch {}
-	  try { sendStateToClient(c, ws); } catch {}
-
 	  broadcastUsers();
-	  markPresence(clientId, { name: c.name, participantId: c.participantId, isHost: !!c.isHost });
 	  return;
 	}
 
 
-    // Configurazione budget/slot (host)
-    if (msg.type === 'host:set-budget') {
-      const { credits, slots } = msg;
-      if (!clients.get(clientId)?.isHost) { ws.send(JSON.stringify({ type:'error', message:'Solo host' })); return; }
-      if (!Number.isFinite(credits)) { ws.send(JSON.stringify({ type:'error', message:'credits non valido' })); return; }
-      defaultCredits = Math.max(0, Math.floor(credits));
-      if (slots && typeof slots === 'object') {
-        defaultSlotsByRole = {
-          por: Math.max(0, Math.floor(slots.por||0)),
-          dif: Math.max(0, Math.floor(slots.dif||0)),
-          cen: Math.max(0, Math.floor(slots.cen||0)),
-          att: Math.max(0, Math.floor(slots.att||0))
-        };
+    // === Controlli gestore: budget/slot ===
+    // Imposta defaults per tutti (e per i futuri)
+	// === Host: skippa nominatore corrente (passa al prossimo eleggibile) ===
+	if (msg.type === 'host:skip-nominator') {
+	  const me = clients.get(clientId);
+	  if (!me || !me.isHost) { 
+		ws.send(JSON.stringify({ type:'error', message:'Non autorizzato' })); 
+		console.log('[WS] host:skip-nominator rifiutato: client non host', { clientId });
+		return; 
+	  }
+
+	  if (!roundMode) {
+		ws.send(JSON.stringify({ type:'host:skip-ack', ok:false, reason:'round-not-active' }));
+		console.log('[WS] host:skip-nominator ignorato: round non attivo');
+		return;
+	  }
+
+	  console.log('[WS] host:skip-nominator ricevuto. Prima di skip:', {
+		currentNominatorId,
+		currentName: currentNominatorId ? (clients.get(currentNominatorId)?.name) : null,
+		nominationOrder: nominationOrder.map(id => clients.get(id)?.name || id)
+	  });
+
+	  const result = skipCurrentNominator();
+	  broadcastRoundState();
+
+	  ws.send(JSON.stringify({
+		type: 'host:skip-ack',
+		ok: result.changed || result.next !== null,
+		reason: result.reason,
+		prev: result.prev,
+		next: result.next,
+		prevName: result.prev ? (clients.get(result.prev)?.name || '—') : null,
+		nextName: result.next ? (clients.get(result.next)?.name || '—') : null
+	  }));
+
+	  console.log('[WS] host:skip-nominator esito:', result, {
+		newCurrent: currentNominatorId,
+		newName: currentNominatorId ? (clients.get(currentNominatorId)?.name) : null
+	  });
+
+	  pushLog({
+		type: 'round-skip',
+		time: now(),
+		prev: result.prev ? (clients.get(result.prev)?.name || result.prev) : null,
+		next: result.next ? (clients.get(result.next)?.name || result.next) : null,
+		reason: result.reason
+	  });
+	  return;
+	}
+
+	
+    if (msg.type === 'host:set-budgets' && clients.get(clientId).isHost) {
+	  const cr = Math.max(0, Math.floor(Number(msg.credits) || 0));
+	  const slotsPor = Math.max(0, Math.floor(Number(msg.slotsPor ?? 3)));
+	  const slotsDif = Math.max(0, Math.floor(Number(msg.slotsDif ?? 8)));
+	  const slotsCen = Math.max(0, Math.floor(Number(msg.slotsCen ?? 8)));
+	  const slotsAtt = Math.max(0, Math.floor(Number(msg.slotsAtt ?? 6)));
+
+	  defaultCredits = cr;
+	  defaultSlotsByRole = { por: slotsPor, dif: slotsDif, cen: slotsCen, att: slotsAtt };
+
+	  for (const [, c] of clients) if (!c.isHost) {
+		c.credits = cr; c.initialCredits = cr;
+		c.slotsByRole = cloneSlots(defaultSlotsByRole);
+		c.initialSlotsByRole = cloneSlots(defaultSlotsByRole);
+	  }
+
+	  pushLog({ type: 'budgets-set', time: now(), credits: cr, slotsByRole: defaultSlotsByRole });
+	  broadcastUsers();
+	  if (roundMode) { if (!eligibleBidder(clients.get(currentNominatorId))) pickFirstEligible(); broadcastRoundState(); }
+	  return;
+	}
+
+
+    // Aggiorna singolo bidder (delta o set)
+    if (msg.type === 'host:update-bidder' && clients.get(clientId).isHost) {
+	  const t = clients.get(String(msg.clientId));
+	  if (!t) { ws.send(JSON.stringify({ type:'error', message:'Utente non trovato' })); return; }
+	  ensureBudgetFields(t);
+
+	  if (Object.prototype.hasOwnProperty.call(msg, 'setCredits'))
+		t.credits = Math.max(0, Math.floor(Number(msg.setCredits) || 0));
+	  if (Object.prototype.hasOwnProperty.call(msg, 'creditsDelta'))
+		t.credits = Math.max(0, (t.credits||0) + Math.floor(Number(msg.creditsDelta)||0));
+
+	  // set/delta per ruolo, es: { setSlotsByRole: {por:2} } oppure { slotsDeltaRole: {role:'dif', delta:+1} }
+	  if (msg.setSlotsByRole && typeof msg.setSlotsByRole === 'object') {
+		const obj = msg.setSlotsByRole;
+		['por','dif','cen','att'].forEach(k=>{
+		  if (obj[k] != null) t.slotsByRole[k] = Math.max(0, Math.floor(Number(obj[k])||0));
+		});
+	  }
+	  if (msg.slotsDeltaRole && typeof msg.slotsDeltaRole === 'object') {
+		const { role, delta } = msg.slotsDeltaRole;
+		if (['por','dif','cen','att'].includes(role)) {
+		  t.slotsByRole[role] = Math.max(0, (t.slotsByRole[role]||0) + Math.floor(Number(delta)||0));
+		}
+	  }
+
+	  pushLog({ type:'bidder-update', time: now(), target: t.name, credits: t.credits, slotsByRole: t.slotsByRole });
+	  broadcastUsers();
+	  if (roundMode) { if (!eligibleBidder(clients.get(currentNominatorId))) pickFirstEligible(); broadcastRoundState(); }
+	  return;
+	}
+
+
+    // Solo host
+    if (msg.type === 'host:set-timer' && clients.get(clientId).isHost) {
+	  const sec = Math.max(5, Math.floor(Number(msg.seconds) || 30));
+	  baseCountdownSeconds = sec;
+	  pushLog({ type: 'timer-set', time: now(), seconds: sec });
+	  // l'UI (host) mostra il "predefinito" impostato; i reset effettivi possono essere più bassi
+	  broadcast({ type: 'timer-updated', seconds: sec });
+	  return;
+	}
+
+    if (msg.type === 'host:start-item' && clients.get(clientId).isHost) {
+      const name = (msg.name || '').trim() || 'Senza titolo';
+      const startPrice = Math.max(0, Math.floor(Number(msg.startPrice) || 0));
+      const role = msg.role || '';
+      const team = msg.team || '';
+      const image = (msg.image || '').trim();
+
+      currentItem = { name, startPrice, role, team, image };
+      currentPrice = startPrice;
+      currentBidder = null;
+      bidHistory = [];
+
+      pushLog({ type: 'auction-start', time: now(), item: currentItem, timer: baseCountdownSeconds });
+
+	  const secs = dynamicSecondsFor(currentPrice);
+	  broadcastAuctionStartedTailoredWithSeconds(secs);
+	  startTimer(secs);
+      return;
+    }
+
+    // Start da CSV
+    if (msg.type === 'host:start-player' && clients.get(clientId).isHost) {
+      const p = msg.player || {};
+      const name = String(p.Nome || p.name || 'Senza titolo');
+      const startPrice = Math.max(0, Math.floor(Number(p.ValoreBase || p.startPrice || 0)));
+      const role = p.Ruolo || '';
+      const team = p.Squadra || '';
+      
+	  const image = (p.Immagine || p.Image || p.Foto || p.Photo || p.img || p.image || '').toString().trim();
+
+      currentItem = { name, startPrice, role, team, image };
+      currentPrice = startPrice;
+      currentBidder = null;
+      bidHistory = [];
+
+	  pushLog({ type: 'auction-start', time: now(), item: currentItem, timer: baseCountdownSeconds, source: 'csv'  });
+
+	  const secs = dynamicSecondsFor(currentPrice);
+	  broadcastAuctionStartedTailoredWithSeconds(secs);
+
+      startTimer(secs);
+      return;
+    }
+
+    if (msg.type === 'host:end-item' && clients.get(clientId).isHost) {
+      endAuction('manual');
+      return;
+    }
+
+    if (msg.type === 'host:expel' && clients.get(clientId).isHost) {
+      const targetId = msg.clientId;
+      const target = clients.get(targetId);
+      if (target) {
+        try { target.ws.send(JSON.stringify({ type: 'expelled' })); } catch {}
+        try { target.ws.close(); } catch {}
+        clients.delete(targetId);
+        pushLog({ type: 'kick', time: now(), target: targetId });
+        broadcastUsers();
       }
-      broadcast({ type:'config-updated', credits: defaultCredits, slots: defaultSlotsByRole });
-      pushLog({ type:'config-updated', time: now(), credits: defaultCredits, slots: defaultSlotsByRole });
-      // aggiorna tutti
-      for (const [,c] of clients) ensureBudgetFields(c);
-      broadcastUsers();
       return;
     }
+	
+	// === Host: elimina tutti gli anonimi (senza participantId) ===
+	if (msg.type === 'host:kick-anon' && clients.get(clientId).isHost) {
+	  const kicked = [];
+	  for (const [id, c] of [...clients]) {
+		if (!c.isHost && !c.participantId) {
+		  try { c.ws.send(JSON.stringify({ type:'expelled' })); } catch {}
+		  try { c.ws.close(); } catch {}
+		  clients.delete(id);
+		  kicked.push(id);
+		}
+	  }
+	  if (kicked.length) pushLog({ type:'kick-anon', time: now(), ids: kicked });
+	  // ripulisci l’ordine del round robin e stato UI
+	  if (roundMode) {
+		nominationOrder = nominationOrder.filter(id => clients.has(id));
+		if (!clients.has(currentNominatorId)) pickFirstEligible();
+		broadcastRoundState();
+	  }
+	  broadcastUsers();
+	  return;
+	}
 
-    // Avvio asta da giocatore (host)
-    if (msg.type === 'host:start') {
-      if (!clients.get(clientId)?.isHost) { ws.send(JSON.stringify({ type:'error', message:'Solo host' })); return; }
-      const { item } = msg;
-      if (!item || !item.name) { ws.send(JSON.stringify({ type:'error', message:'Item invalido' })); return; }
-      currentItem = item;
-      currentPrice = Math.max(0, Math.floor(Number(item.startPrice || 0)));
-      currentBidder = null; currentBidderId = null; bidHistory = [];
-      const secs = dynamicSecondsFor(currentPrice || Number(currentItem?.startPrice || 0) || 0);
-      broadcast({ type:'auction-started', item: currentItem, currentPrice, seconds: secs });
-      pushLog({ type:'auction-start', time: now(), item });
-      startTimer(secs);
-      setPaused(false, null);
-      return;
-    }
 
-    // Avvio round-robin
-    if (msg.type === 'host:round-start') {
-      if (!clients.get(clientId)?.isHost) { ws.send(JSON.stringify({ type:'error', message:'Solo host' })); return; }
-      roundMode = msg.strategy === 'name' ? 'name' : 'random';
-      nominationOrder = buildNominationOrder(roundMode);
-      nominationIndex = -1; pickFirstEligible();
-      broadcastRoundState();
-      pushLog({ type:'round-start', time: now(), strategy: roundMode, order: nominationOrder.slice() });
-      return;
-    }
+	// Il gestore chiede la lista utenti corrente (sync immediato)
+	if (msg.type === 'host:get-users') {
+	  const me = clients.get(clientId);
+	  if (!me || !me.isHost) { 
+		ws.send(JSON.stringify({ type: 'error', message: 'Non autorizzato' }));
+		return;
+	  }
 
-    if (msg.type === 'host:round-stop') {
-      if (!clients.get(clientId)?.isHost) { ws.send(JSON.stringify({ type:'error', message:'Solo host' })); return; }
-      roundMode = false; nominationOrder = []; nominationIndex = -1; currentNominatorId = null;
-      broadcastRoundState();
-      pushLog({ type:'round-stop', time: now() });
-      return;
-    }
+	  const users = [];
+	  for (const [id, c] of clients) {
+		ensureBudgetFields(c);
+		users.push({
+		  id, // sessione
+		  participantId: c.participantId || null, // NEW
+		  name: c.name,
+		  isHost: !!c.isHost,
+		  role: c.role || 'bidder',
+		  credits: c.credits ?? 0,
+		  initialCredits: c.initialCredits ?? 0,
+		  slotsByRole: cloneSlots(c.slotsByRole || {}),
+		  initialSlotsByRole: cloneSlots(c.initialSlotsByRole || {})
+		});
+	  }
+	  try { ws.send(JSON.stringify({ type: 'user-list', users })); } catch {}
+	  return;
+	}
 
-    if (msg.type === 'host:skip-nominator') {
-      if (!clients.get(clientId)?.isHost) { ws.send(JSON.stringify({ type:'error', message:'Solo host' })); return; }
-      const prev = currentNominatorId;
-      const result = advanceNominator();
-      broadcastRoundState();
-      pushLog({ type:'round-skip', time: now(), prev, result });
-      reevaluatePause();
-      return;
-    }
+	// === Host: avvia/stop round robin (una nomina per turno) ===
+	if (msg.type === 'host:start-round' && clients.get(clientId).isHost) {
+	  const strategy = (msg.strategy === 'name') ? 'name' : 'random';
+	  nominationOrder = buildNominationOrder(strategy);
+	  roundMode = true;
+	  nominationIndex = 0;
+	  pickFirstEligible(); // sceglie il primo con slot
+	  pushLog({ type:'round-start', time: now(), strategy, order: nominationOrder.map(id=>clients.get(id)?.name||id) });
+	  broadcastRoundState();
+	  return;
+	}
 
-    // Nomina da bidder durante round
-    if (msg.type === 'bidder:nominate') {
-      const c = clients.get(clientId);
-      if (!roundMode) { ws.send(JSON.stringify({ type:'error', message:'Round non attivo' })); return; }
-      if (clientId !== currentNominatorId) { ws.send(JSON.stringify({ type:'error', message:'Non è il tuo turno di nominare' })); return; }
-      const { item } = msg;
-      if (!item || !item.name) { ws.send(JSON.stringify({ type:'error', message:'Item invalido' })); return; }
-      currentItem = item; currentPrice = Math.max(0, Math.floor(Number(item.startPrice || 0))); currentBidder = null; currentBidderId = null; bidHistory = [];
-      const secs = dynamicSecondsFor(currentPrice || Number(currentItem?.startPrice || 0) || 0);
-      broadcast({ type:'auction-started', item: currentItem, currentPrice, seconds: secs });
-      pushLog({ type:'auction-start', time: now(), item, by: c?.name||'—' });
-      startTimer(secs);
-      setPaused(false, null);
-      return;
-    }
+	if (msg.type === 'host:stop-round' && clients.get(clientId).isHost) {
+	  roundMode = false;
+	  nominationOrder = [];
+	  nominationIndex = 0;
+	  currentNominatorId = null;
+	  pushLog({ type:'round-stop', time: now() });
+	  broadcastRoundState();
+	  return;
+	}
+
+	// === Bidder: nomina un giocatore (solo se è il suo turno) ===
+	if (msg.type === 'bidder:nominate') {
+	  if (!roundMode) { ws.send(JSON.stringify({ type:'error', message:'Round Robin non attivo.' })); return; }
+	  if (clientId !== currentNominatorId) { ws.send(JSON.stringify({ type:'error', message:'Non è il tuo turno per nominare.' })); return; }
+	  if (currentItem) { ws.send(JSON.stringify({ type:'error', message:'C’è già un’asta in corso.' })); return; }
+
+	  const caller = clients.get(clientId);
+	  if (!eligibleBidder(caller)) {
+		// niente slot → salta al prossimo
+		advanceNominatorNext();
+		broadcastRoundState();
+		ws.send(JSON.stringify({ type:'error', message:'Nessuno slot rimanente.' }));
+		return;
+	  }
+
+	  const p = msg.player || {};
+	  const name = String(p.Nome || p.name || '').trim();
+	  if (!name) { ws.send(JSON.stringify({ type:'error', message:'Giocatore non valido.' })); return; }
+
+	  const startPrice = Math.max(0, Math.floor(Number(p.ValoreBase || p.startPrice || 0)));
+	  const role  = p.Ruolo   || '';
+	  const team  = p.Squadra || '';
+	  const image = (p.Immagine || p.Image || p.Foto || p.Photo || p.img || p.image || '').toString().trim();
+
+	  currentItem   = { name, startPrice, role, team, image };
+	  currentPrice  = startPrice;
+	  currentBidder = null;
+	  bidHistory    = [];
+
+	  // Nel log teniamo il "predefinito" impostato dal gestore
+	  pushLog({ type:'auction-start', time: now(), item: currentItem, timer: baseCountdownSeconds, source:'round', by: caller.name });
+
+	  // Passa SUBITO il turno al prossimo eleggibile (una nomina per giro)
+	  advanceNominatorNext();
+	  broadcastRoundState();
+
+	  // ⬇️ Timer dinamico all'avvio in base al prezzo corrente
+	  const secs = dynamicSecondsFor(currentPrice);
+	  broadcastAuctionStartedTailoredWithSeconds(secs);
+	  startTimer(secs);
+	  return;
+	}
+
+
 
     // Offerte
     if (msg.type === 'bid') {
-      if (auctionPaused) { try{ ws.send(JSON.stringify({ type:'error', message:'Asta in pausa.' })); }catch{} return; }
       if (!currentItem) { ws.send(JSON.stringify({ type: 'error', message: 'Nessun oggetto in asta.' })); return; }
       const c = clients.get(clientId);
-      if (c && c.participantId) { const chk = allowOffer(c.participantId, currentPrice, Number(msg.amount)); if (!chk.ok) { try{ ws.send(JSON.stringify({ type:'error', message: `Offerta rifiutata: ${chk.reason}` })); }catch{} return; } }
-      if (c.role === 'monitor') { ws.send(JSON.stringify({ type:'error', message: 'Il monitor non può fare offerte.' })); return; }
+      if (c.role === 'monitor') { ws.send(JSON.stringify({ type: 'error', message: 'Il monitor non può fare offerte.' })); return; }
 
       const next = Math.floor(Number(msg.amount));
       const min = currentPrice + minIncrement;
       if (!Number.isFinite(next) || next < min) {
-        ws.send(JSON.stringify({ type: 'error', message: `Offerta minima: ${min}` }));
+        ws.send(JSON.stringify({ type: 'error', message: `Offerta minima ${min}` }));
         return;
       }
+	  
+	  // ruolo del giocatore in corso
+	  const rkey = roleKeyFromText(currentItem?.role || '');
+	  if (!rkey) { ws.send(JSON.stringify({ type:'error', message:'Ruolo non valido per il giocatore.' })); return; }
 
-      // il bidder deve essere “eleggibile”
-      if (!eligibleBidder(c)) { ws.send(JSON.stringify({ type:'error', message:'Slot/budget non eleggibili' })); return; }
+      // deve avere slot disponibili per quel ruolo
+	  ensureBudgetFields(c);
+	  if ((c.slotsByRole[rkey] || 0) <= 0) {
+	    ws.send(JSON.stringify({ type:'error', message:`Nessuno slot disponibile per il ruolo ${currentItem.role || rkey.toUpperCase()}` }));
+	    return;
+	  } 
 
-      // Scatta il reset timer e aggiorna stato
+	  // max offerta in base a TUTTI gli slot rimanenti
+	  const slotsRimTot = totalSlotsRemaining(c.slotsByRole);
+	  const maxAllowed = Math.max(0, Number(c.credits || 0) - Math.max(0, slotsRimTot - 1));
+	  if (next > maxAllowed) {
+	    ws.send(JSON.stringify({ type:'error', message:`Budget insufficiente. Max puntata: ${maxAllowed}` }));
+	    return;
+	  }
+
       currentPrice = next;
-      currentBidder = c.name || '—';
-      currentBidderId = clientId;
-      try{ reevaluatePause(); }catch{}
-      bidHistory.push({ time: now(), name: currentBidder, amount: currentPrice });
+      currentBidder = c.name;
+	  currentBidderId = clientId;
+      const entry = { t: now(), name: currentBidder, amount: currentPrice };
+      bidHistory.push(entry);
+      pushLog({ type: 'bid', time: entry.t, item: currentItem, name: currentBidder, amount: currentPrice });
 
-      broadcast({ type:'bid-accepted', by: currentBidder, amount: currentPrice, last3: lastNBids(3) });
+      broadcast({ type: 'new-bid', amount: currentPrice, name: currentBidder, last3: lastNBids(3) });
       resetTimer();
-      return;
-    }
-
-    if (msg.type === 'host:end') {
-      if (!clients.get(clientId)?.isHost) { ws.send(JSON.stringify({ type:'error', message:'Solo host' })); return; }
-      endAuction('host-end');
-      return;
-    }
-
-    if (msg.type === 'host:pause') {
-      if (!clients.get(clientId)?.isHost) { ws.send(JSON.stringify({ type:'error', message:'Solo host' })); return; }
-      setPaused(true, 'host_pause');
-      return;
-    }
-
-    if (msg.type === 'host:resume') {
-      if (!clients.get(clientId)?.isHost) { ws.send(JSON.stringify({ type:'error', message:'Solo host' })); return; }
-      setPaused(false, null);
-      return;
-    }
-
-    if (msg.type === 'host:set-countdown') {
-      if (!clients.get(clientId)?.isHost) { ws.send(JSON.stringify({ type:'error', message:'Solo host' })); return; }
-      const v = Math.max(3, Math.floor(Number(msg.seconds || baseCountdownSeconds)));
-      baseCountdownSeconds = v;
-      broadcast({ type:'countdown-updated', seconds: v });
-      return;
-    }
-
-    if (msg.type === 'host:set-increment') {
-      if (!clients.get(clientId)?.isHost) { ws.send(JSON.stringify({ type:'error', message:'Solo host' })); return; }
-      const v = Math.max(1, Math.floor(Number(msg.minIncrement || minIncrement)));
-      minIncrement = v;
-      broadcast({ type:'increment-updated', minIncrement: v });
       return;
     }
   });
@@ -994,8 +1004,8 @@ if (msg.type === 'join' && msg.token) {
 	  }
 
 	  clients.delete(clientId);
-	  presence.set(clientId, { ...(presence.get(clientId)||{}), lastSeen: Date.now() - STALE_CLIENT_MS - 1 });
 	  broadcastUsers();
+
 	  if (roundMode) {
 		const prevLen = nominationOrder.length;
 		nominationOrder = nominationOrder.filter(id => clients.has(id));
@@ -1008,33 +1018,235 @@ if (msg.type === 'join' && msg.token) {
 	});
 });
 
-// === Minimo indispensabile non mostrato sopra ===
-let minIncrement = 1;
+require('dotenv').config();
+const { v4: uuid } = require('uuid');
+const { sign, verify } = require('./lib/token');
+const { getParticipant, upsertParticipant, deleteParticipant, listParticipants } = require('./lib/registry');
 
-function addToRoundIfEligible(id){
-  if (!roundMode) return;
-  if (!clients.has(id)) return;
-  if (!eligibleBidder(clients.get(id))) return;
-  const inOrder = nominationOrder.includes(id);
-  if (!inOrder) {
-    nominationOrder.push(id);
-    if (currentNominatorId == null) pickFirstEligible();
-    broadcastRoundState();
-  }
+const INVITE_SECRET = process.env.INVITE_SECRET || 'dev-secret';
+app.use(express.json());
+
+// (facoltativo) middleware minimo per proteggere endpoint inviti
+function ensureHostWeak(req, res, next){
+  // più semplice: accetta tutto; per hardened, usa una sessione/cookie
+  next();
 }
 
-// Avvio server
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  try {
-    fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
-    fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-    console.log('[HTTP] listening on :%s', PORT);
-    console.log('[ENV] HOST_PIN set? %s', process.env.HOST_PIN ? 'yes' : 'no');
-    console.log('[ENV] INVITE_SECRET set? %s', process.env.INVITE_SECRET ? 'yes' : 'no');
-    console.log('[DIR] LOG_DIR =', LOG_DIR);
-  } catch (e) {
-    console.error('[log] mkdir error', e);
+const INV_DB = path.join(__dirname, 'data', 'invites.json');
+
+function loadInvites() {
+  try { return JSON.parse(fs.readFileSync(INV_DB, 'utf8')); } catch { return []; }
+}
+function saveInvites(list) {
+  fs.mkdirSync(path.dirname(INV_DB), { recursive: true });
+  fs.writeFileSync(INV_DB, JSON.stringify(list, null, 2));
+}
+function randomToken(n = 32) {
+  return require('crypto').randomBytes(n).toString('base64url');
+}
+
+
+// POST crea/ottieni (idempotente)
+app.post('/host/invite/create', express.json(), (req, res) => {
+  if (!isHostReq(req)) return res.status(403).json({ success:false, error:'forbidden' });
+
+  const { participantId = null, clientId = null, name = '', role = 'bidder' } = req.body || {};
+  const safeName = String(name || '').trim();
+  const safeRole = (role === 'monitor') ? 'monitor' : (role === 'host') ? 'host' : 'bidder';
+
+  const list = loadInvites();
+
+  // Helper: crea o aggiorna invito idempotente per un dato participantId
+  function upsertInviteForParticipant(pid, pname, prole) {
+    // se esiste un invito non revocato per questo participant → riusa
+    let inv = list.find(x => x.participantId === pid && !x.revoked);
+    if (!inv) {
+      inv = {
+        id: 'inv_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+        participantId: pid,
+        name: pname || '',
+        role: prole || 'bidder',
+        token: randomToken(24),
+        createdAt: Date.now(),
+        revoked: false
+      };
+      list.push(inv);
+      saveInvites(list);
+    }
+    return inv;
   }
+
+  // Caso A: mi è stato passato un participantId valido → bind diretto
+  if (participantId) {
+    const p = getParticipant(participantId);
+    // Compat: se participantId in realtà è un clientId (utente connesso senza participant)
+    if (!p && clients.has(participantId)) {
+      const c = clients.get(participantId);
+      ensureBudgetFields(c);
+      const newP = upsertParticipant({
+        id: 'p_' + Math.random().toString(36).slice(2),
+        name: c.name || safeName || 'Ospite',
+        role: c.role || 'bidder',
+        isHost: !!c.isHost,
+        credits: Number(c.credits || 0),
+        initialCredits: Number(c.initialCredits ?? c.credits ?? 0),
+        slotsByRole: cloneSlots(c.slotsByRole || defaultSlotsByRole),
+        initialSlotsByRole: cloneSlots(c.initialSlotsByRole || c.slotsByRole || defaultSlotsByRole),
+      });
+      c.participantId = newP.id; // ↔️ linka la sessione corrente
+      const inv = upsertInviteForParticipant(newP.id, newP.name, newP.role);
+      return res.json({ success:true, invite: inv });
+    }
+
+    if (!p) return res.json({ success:false, error:'participant-not-found' });
+    const inv = upsertInviteForParticipant(p.id, p.name, p.role);
+    return res.json({ success:true, invite: inv });
+  }
+
+  // Caso B: niente participantId ma ho clientId (utente connesso senza participant)
+  if (clientId && clients.has(clientId)) {
+    const c = clients.get(clientId);
+    ensureBudgetFields(c);
+
+    // Se la sessione ha già participantId, usalo; altrimenti crealo ora
+    let pid = c.participantId;
+    if (!pid) {
+      const newP = upsertParticipant({
+        id: 'p_' + Math.random().toString(36).slice(2),
+        name: c.name || safeName || 'Ospite',
+        role: c.role || 'bidder',
+        isHost: !!c.isHost,
+        credits: Number(c.credits || 0),
+        initialCredits: Number(c.initialCredits ?? c.credits ?? 0),
+        slotsByRole: cloneSlots(c.slotsByRole || defaultSlotsByRole),
+        initialSlotsByRole: cloneSlots(c.initialSlotsByRole || c.slotsByRole || defaultSlotsByRole),
+      });
+      pid = newP.id;
+      c.participantId = pid;
+    }
+
+    const p = getParticipant(pid);
+    const inv = upsertInviteForParticipant(p.id, p.name, p.role);
+    return res.json({ success:true, invite: inv });
+  }
+
+  // Caso C: invito standalone “da nome” (utente non connesso)
+  if (!safeName) return res.json({ success:false, error:'name-required' });
+
+  // dedup inviti standalone non revocati per stesso name+role e participantId null
+  const byStandalone = (x) => !x.revoked &&
+    (x.participantId == null) &&
+    (String(x.name || '').trim().toLowerCase() === safeName.toLowerCase()) &&
+    (String(x.role || 'bidder') === safeRole);
+
+  let inv = list.find(byStandalone);
+  if (!inv) {
+    inv = {
+      id: 'inv_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+      participantId: null,
+      name: safeName,
+      role: safeRole,
+      token: randomToken(24),
+      createdAt: Date.now(),
+      revoked: false
+    };
+    list.push(inv);
+    saveInvites(list);
+  }
+
+  return res.json({ success:true, invite: inv });
+});
+
+
+
+app.get('/host/invite/list', (req, res) => {
+  if (!isHostReq(req)) return res.status(403).json({ success:false, error:'forbidden' });
+  const list = loadInvites().map(x => ({ ...x, role: x.role || 'bidder' }));
+  res.json({ success:true, invites: list });
+});
+
+
+// POST rotate (genera nuovo token, opzionale)
+app.post('/host/invite/rotate', express.json(), (req, res) => {
+  if (!isHostReq(req)) return res.status(403).json({ success:false, error:'forbidden' });
+  const { id } = req.body || {};
+  if (!id) return res.json({ success:false, error:'bad-input' });
+
+  const list = loadInvites();
+  const inv = list.find(x => x.id === id);
+  if (!inv || inv.revoked) return res.json({ success:false, error:'not-found-or-revoked' });
+
+  inv.token = randomToken(24);
+  inv.updatedAt = Date.now();
+  saveInvites(list);
+
+  res.json({ success:true, invite: inv });
+});
+
+
+// POST revoke (non cancella, marca revoked)
+app.post('/host/invite/revoke', express.json(), (req, res) => {
+  if (!isHostReq(req)) return res.status(403).json({ success:false, error:'forbidden' });
+  const { id } = req.body || {};
+  if (!id) return res.json({ success:false, error:'bad-input' });
+
+  const list = loadInvites();
+  const inv = list.find(x => x.id === id);
+  if (!inv) return res.json({ success:false, error:'not-found' });
+
+  inv.revoked = true;
+  inv.revokedAt = Date.now();
+  saveInvites(list);
+
+  res.json({ success:true });
+});
+
+
+function isHostReq(req) {
+  // Usa la tua auth host (es. cookie di sessione del PIN host)
+  // oppure consenti solo da localhost/loopback nel tuo setup attuale.
+  return true;
+}
+
+
+app.get('/join/by-token/:token', (req, res) => {
+  const { token } = req.params;
+  const inv = loadInvites().find(x => x.token === token && !x.revoked);
+  if (!inv) return res.status(400).send('Invito non valido o revocato');
+
+  // pagina inline per fare auto-join via websocket
+  res.type('html').send(`<!doctype html>
+<html lang="it"><meta charset="utf-8"><title>Entra nell'asta</title>
+<body style="font-family:system-ui; padding:24px">
+<h1>Connessione in corso…</h1>
+<p>Stiamo collegandoti come <b>${inv.name ? String(inv.name).replace(/</g,'&lt;') : 'partecipante'}</b>.</p>
+<script>
+  (function(){
+    var token = ${JSON.stringify(token)};
+    var proto = (location.protocol === 'https:') ? 'wss://' : 'ws://';
+    var ws = new WebSocket(proto + location.host);
+    ws.onopen = function(){
+      ws.send(JSON.stringify({ type:'join-by-invite', token: token }));
+    };
+    ws.onmessage = function(ev){
+      try{
+        var d = JSON.parse(ev.data);
+        if (d.type === 'joined' && d.success) {
+          // reindirizza all'app "normale"
+          location.href = '/';
+        } else if (d.type === 'error') {
+          document.body.innerHTML = '<h1>Errore</h1><p>'+ (d.message||'Join fallita') +'</p>';
+        }
+      }catch(e){}
+    };
+    ws.onerror = function(){ document.body.innerHTML = '<h1>Errore</h1><p>Connessione non riuscita.</p>'; };
+  })();
+</script>
+</body></html>`);
+});
+
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on http://0.0.0.0:${PORT}`);
 });

@@ -341,7 +341,7 @@
 
 	/* Immagine */
 	.mon-img{
-	  display:block; max-width:min(44vw,560px);
+	  display:block; width:100%; max-width:min(44vw,560px);
 	  border-radius:20px; border:1px solid var(--border);
 	  background:#0b0f1e; object-fit:cover;
 	  box-shadow: 0 20px 60px rgba(0,0,0,.35);
@@ -450,69 +450,12 @@
 	  font-size: clamp(18px, 2.2vw, 28px);
 	}
 	.is-fullscreen .mon-img{
-	  max-width: 34vw;
+	  max-width: 70vw;
 	  max-height: 76vh;
 	}
 
-	/* Presenza + pausa + modale rollcall */
-	#pauseBanner { display:none; background:#f44336; color:#fff; padding:10px; text-align:center; font-weight:700; border-radius:8px; margin:6px 0; }
-	#presence { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 4px; }
-	.user { display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:999px; font-size:13px; border:1px solid #e5e7eb; }
-	.user.online  { background:#ecfdf5; color:#065f46; border-color:#10b981; }
-	.user.offline { background:#f3f4f6; color:#374151; }
-
-	#rollcallModal {
-	  display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
-	  z-index:9999; align-items:center; justify-content:center;
-	}
-	#rollcallModal .box{
-	  background:#fff; color:#111; width:min(640px,92vw); border-radius:12px; padding:16px; border:1px solid #e5e7eb;
-	}
 
   </style>
-  <script>
-	// helper compat per inviare sul WS
-	function wsSend(obj){ try { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); } catch {} }
-
-	// heartbeat (oltre al tuo ping esistente)
-	let hbTimer = null;
-	function startHeartbeat(){
-	  if (hbTimer) clearInterval(hbTimer);
-	  hbTimer = setInterval(() => wsSend({ type:'hb' }), 10_000);
-	}
-	function stopHeartbeat(){ if (hbTimer) { clearInterval(hbTimer); hbTimer=null; } }
-
-	// presenza UI
-	function renderPresence(list){
-	  const box = document.getElementById('presence'); if (!box) return;
-	  box.innerHTML = '';
-	  (list||[]).forEach(u => {
-		const el = document.createElement('span');
-		el.className = 'user ' + (u.online ? 'online' : 'offline');
-		el.textContent = u.name || 'Anonimo';
-		box.appendChild(el);
-	  });
-	}
-
-	// banner pausa
-	function togglePauseBanner(flag, reason){
-	  const b = document.getElementById('pauseBanner'); if (!b) return;
-	  if (flag) { b.style.display='block'; b.textContent = '⏸ Asta in pausa: ' + (reason||''); }
-	  else { b.style.display='none'; }
-	}
-
-	// roll-call UI
-	function openRollcall(online=[], missing=[]){
-	  const m = document.getElementById('rollcallModal');
-	  const c = document.getElementById('rollcallContent');
-	  if (!m || !c) return;
-	  const on  = (online||[]).join(', ') || '—';
-	  const off = (missing||[]).join(', ') || 'nessuno';
-	  c.textContent = `Online: ${on}\nMancanti: ${off}`;
-	  m.style.display = 'flex';
-	}
-	function closeRollcall(){ const m = document.getElementById('rollcallModal'); if (m) m.style.display='none'; }
-	</script>
   <script>
 	// === Fullscreen helpers ===
 	function isFullscreen() {
@@ -711,7 +654,7 @@
 	  const r = await fetch('/host/invite/list');
 	  const j = await r.json();
 	  if (!j.success || !Array.isArray(j.invites)) {
-		showToast('Impossibile caricare gli inviti', 'error'); return;
+		throw new Error('Impossibile caricare gli inviti');
 	  }
 	  invitesCache = j.invites.map(inv => ({
 		id: inv.id,
@@ -788,7 +731,6 @@
 		// se l’utente aveva selezionato host in precedenza, prova il PIN salvato
 		const last = JSON.parse(localStorage.getItem('lastLogin') || '{}');
 		if (last?.role === 'host' && last?.pin) {
-		  pendingHostLogin = true;
 		  ws.send(JSON.stringify({ type:'host-login', pin: last.pin }));
 		}
 		return;
@@ -879,7 +821,7 @@
 		if (!j.success) throw new Error(j.error || 'Errore creazione invito');
 
 		// copia subito il link costruito dal token dell'invito
-		const link = inviteJoinUrl(j.token || j.invite?.token);
+		const link = inviteJoinUrl(j.invite.token);
 		try { await navigator.clipboard.writeText(link); showToast('Link copiato', 'ok'); } catch {}
 
 		// pulizia campo + refresh lista
@@ -905,13 +847,12 @@
 	  const id = btn.getAttribute('data-id');
 
 	  try {
-		const tr = btn.closest('tr');
 		if (action === 'copy') {
 		  const tr = btn.closest('tr');
 		  const input = tr.querySelector('input[readonly]');
 		  input.select(); input.setSelectionRange(0, 99999);
-		  try { await navigator.clipboard.writeText(input.value); showToast('Link copiato', 'ok'); }
-		  catch { window.prompt('Copia il link invito:', input.value); }
+		  await navigator.clipboard.writeText(input.value);
+		  showToast('Link copiato', 'ok');
 		  return;
 		}
 
@@ -919,17 +860,11 @@
 		invitesBusy = true; btn.disabled = true;
 
 		if (action === 'revoke') {
-		  const tokenFromUrl = (tr.querySelector('input[readonly]')?.value.split('t=')[1]||'').trim();
-			const bodyRevoke = { id };
-			if (tokenFromUrl) bodyRevoke.token = decodeURIComponent(tokenFromUrl);
-		  await fetch('/host/invite/revoke', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(bodyRevoke) });
+		  await fetch('/host/invite/revoke', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id })});
 		  await fetchInvites();
 		  showToast('Invito revocato', 'ok');
 		} else if (action === 'rotate') {
-		  const tokenFromUrl2 = (tr.querySelector('input[readonly]')?.value.split('t=')[1]||'').trim();
-		  const bodyRotate = { id };
-		  if (tokenFromUrl2) try { bodyRotate.token = decodeURIComponent(tokenFromUrl2); } catch {}
-		  await fetch('/host/invite/rotate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(bodyRotate) });
+		  await fetch('/host/invite/rotate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id })});
 		  await fetchInvites();
 		  showToast('Nuovo link generato', 'ok');
 		}
@@ -944,11 +879,7 @@
 	document.addEventListener('click', async (e) => {
 	  if (!e.target || e.target.id !== 'inviteCreateBtn') return;
 	  const sel = document.getElementById('inviteUserSelect');
-		// Consenti anche gli ospiti (value = ''), basta che ci sia un’opzione selezionata
-		if (!sel || !sel.selectedOptions || sel.selectedOptions.length === 0) {
-		  showToast('Seleziona un partecipante', 'warn'); 
-		  return;
-		}
+	  if (!sel || !sel.value) { showToast('Seleziona un partecipante', 'warn'); return; }
 	  if (invitesBusy) return;
 	  invitesBusy = true; e.target.disabled = true;
 
@@ -1238,7 +1169,7 @@ function renderNomPage(){
     const img = (p.Immagine || '').toString().trim();
     if (img) {
       const src = img.startsWith('/') ? img
-              : /^https?:\/\//i.test(img) ? img
+              : /^https?:\/\//i.test(img) ? `/img-proxy?u=${encodeURIComponent(img)}`
               : '';
       if (src) thumb = `<img src="${src}" alt="" style="height:28px;width:auto;border-radius:6px;border:1px solid #eee" onerror="this.style.display='none'">`;
     }
@@ -1341,15 +1272,7 @@ function doNominatePlayer(p){
 		  try { ws.send(JSON.stringify({ type: 'join-by-invite', token })); } catch {}
 		});
 	  }
-	  
-	  // mostra i controlli host se divento host
-	  if (isHost) { const t = document.getElementById('hostPresenceTools'); if (t) t.style.display='block'; }
 
-	  // bottoni roll-call
-	  document.getElementById('btnRollcall')?.addEventListener('click', () => wsSend({ type:'host:rollcall' }));
-	  document.getElementById('btnCloseRollcall')?.addEventListener('click', closeRollcall);
-
-		
 	  // costruzione UI + bind login
 	  buildUI();
 
@@ -1471,11 +1394,12 @@ function doNominatePlayer(p){
 		ws.send(JSON.stringify({ type:'join', name, role: (role==='monitor' ? 'monitor' : 'bidder') }));
 		if (role === 'host') {
 		  if (!pin) { alert('Inserisci il PIN gestore'); return; }
-		  pendingHostLogin = true; // evita render transitorio da bidder
 		  ws.send(JSON.stringify({ type:'host-login', pin }));
 		}
 	  });
 	}
+
+
 
 	function cryptoRandomId(){
 	  const a = new Uint8Array(16);
@@ -1507,34 +1431,16 @@ function doNominatePlayer(p){
 	  try { if (ws) ws.close(1000); } catch {}
 	  ws = new WebSocket(url);
 
-      ws.addEventListener('open', () => {
-		  // --- le tue linee esistenti (non perdere la UX) ---
-		  isConnected = true;
-		  if (typeof cancelReconnect === 'function') cancelReconnect();
-		  if (typeof setStatus === 'function') setStatus('Connesso.');
-		  if (typeof setConnectionBanner === 'function') setConnectionBanner(true);
-
-		  // --- NOVITÀ: resume + hello iniziale ---
-		  const r = (typeof loadResume === 'function') ? loadResume() : null;
-		  if (r?.sessionToken) {
-			wsSend({ type: 'resume', sessionToken: r.sessionToken });
-		  }
-		  wsSend({
-			type: 'client:hello',
-			name: r?.name || localStorage.getItem('displayName') || 'Anonimo',
-			participantId: r?.participantId || localStorage.getItem('participantId') || null,
-			isHost: (typeof isHost !== 'undefined' ? isHost : (typeof myRole !== 'undefined' && myRole === 'host'))
-		  });
-
-		  // --- heartbeat + tuo ping keep-alive (entrambi) ---
-		  if (typeof startHeartbeat === 'function') startHeartbeat();
-		  if (typeof startClientPing === 'function') startClientPing();
-
-		  // --- auto-rejoin (tuo flusso) ---
-		  if (typeof thenSend === 'function') thenSend();
-		  else if (typeof autoRejoin === 'function') autoRejoin();
-		}, { once: true });
-
+      ws.addEventListener('open', ()=>{
+		isConnected = true;
+		cancelReconnect();
+		setStatus('Connesso.');
+		setConnectionBanner(true);
+		// ping keep-alive parte/ri-parte
+		startClientPing();
+		// auto-rejoin (token invito o ultimo login)
+		(thenSend || autoRejoin)();
+	  }, { once:true });
 
       ws.onmessage = (e)=>{
         let d; try{ d = JSON.parse(e.data); } catch { return; }
@@ -1571,29 +1477,19 @@ function doNominatePlayer(p){
 		  if ('roundMode' in d) roundMode = !!d.roundMode;
 		  if ('nominationOrder' in d && Array.isArray(d.nominationOrder)) roundOrder = d.nominationOrder;
 		  if ('currentNominatorId' in d) currentNominatorId = d.currentNominatorId;
-
+					  
 		  if (myRole === 'monitor') {
 			setMonPrice(d.amount || d.price || 0);
 			renderLast3Chips(d.last3 || []);
+			// opzionale: un leggero “tick” di countdown se vuoi
+			// paintFancyCountdown(d.secondsRimasti ?? ...);
 		  }
-
+		  
 		  applyAuctionPayload(d);
 		  renderRoundInfo();
 		  renderBidderNominateBox();
 		  return;
 		}
-
-		
-		// presenza aggiornata
-		if (d.type === 'presence:update') { renderPresence(d.list || []); return; }
-
-		// pausa asta
-		if (d.type === 'auction:pause') { togglePauseBanner(!!d.paused, d.reason || ''); return; }
-
-		// esito roll-call
-		if (d.type === 'rollcall:result') { openRollcall(d.online || [], d.missing || []); return; }
-		
-		if (d.type === 'resume:token') { saveResume(d); return; }
 
 		// handler specifico broadcast round
 		if (d.type === 'round-state') {
@@ -1620,9 +1516,6 @@ function doNominatePlayer(p){
         // HOST autenticato
         if (d.type === 'host-auth') {
 		  if (d.success) {
-		  
-			const tools = document.getElementById('hostPresenceTools');
-			if (tools) tools.style.display = 'block';
 		  
 			showLogoutBar(true);
 			myRole = 'host'; isHost = true;
@@ -1651,42 +1544,14 @@ function doNominatePlayer(p){
 		}
 
 
-        // dentro ws.onmessage
-		if (d.type === 'players-list') {
-		  const raw = Array.isArray(d.players) ? d.players : [];
-		  playersCache = raw.map(canonicalRowFront).filter(p => p.Nome);
-
-		  // reset chiamati locale (non tocca il server)
-		  calledPlayers = new Set();
-
-		  // assicura id locale (se ti serve per la UI)
-		  let autoinc = 1;
-		  playersCache.forEach(p => { if (!p._id) p._id = `p_${autoinc++}`; });
-
-		  // 👉 reset filtri che possono svuotare la vista
-		  if (typeof currentNomFilters === 'object') {
-			currentNomFilters.team = null;
-			currentNomFilters.role = null;
-			currentNomFilters.text = '';
-		  }
-
-		  // 👉 mostra il tab "Giocatori" per l’host (se la UI usa tab)
-		  if (myRole === 'host' && typeof showHostTab === 'function') {
-			try { showHostTab('players'); } catch {}
-		  }
-
-		  // 👉 assicura che il container tabella sia visibile
-		  try { document.getElementById('playersTableWrap')?.classList.remove('hidden'); } catch {}
-
-		  renderPlayers();
-		  if (typeof nomHydrateTeams === 'function') nomHydrateTeams();
-		  if (typeof nomHydrateRoles === 'function') nomHydrateRoles();
-		  if (typeof nomApplyFilters === 'function') nomApplyFilters();
-
-		  // debug utile
-		  console.debug('[WS] players-list -> render', playersCache.length);
+        if (d.type === 'players-list') {
+		  playersCache = d.players || [];
+		  renderPlayers();              // già lo fai per la vista host
+		  nomHydrateTeams();            // 👈 popola il filtro squadre nella modale bidder
+		  nomHydrateRoles();            // (opzionale) popola il filtro ruoli
+		  nomApplyFilters();            // (opzionale) aggiorna la lista nella modale se già aperta
+		  return;
 		}
-
 
 
         if (d.type === 'user-list') {
@@ -1777,7 +1642,6 @@ function doNominatePlayer(p){
       };
 
       ws.addEventListener('error', ()=> setStatus('Errore WebSocket', false, true));
-	  ws.addEventListener?.('close', () => { stopHeartbeat(); });
 	  
 	  ws.onclose = () => {
 		stopClientPing(); 
@@ -1975,7 +1839,7 @@ function doNominatePlayer(p){
 			  if (raw.startsWith('/')) {
 				src = raw; // path locale già servito da Express (es. /players/audero.jpg)
 			  } else if (/^https?:\/\//i.test(raw)) {
-				src = raw; 
+				src = `/img-proxy?u=${encodeURIComponent(raw)}`; // usa il proxy per evitare CORS/cache
 				// In alternativa: src = raw;
 			  }
 			}
@@ -2226,99 +2090,44 @@ function doNominatePlayer(p){
 	  }
 	  return out;
 	}
-	
-        function canonicalRowFront(row) {
-          // Se è già canonico (dal server), passa-through
-          if (row && typeof row === 'object') {
-                if ('Nome' in row || 'Ruolo' in row || 'Squadra' in row) return row;
-                // Se arriva in formato inglese {name,role,team,image}
-                if ('name' in row || 'role' in row || 'team' in row || 'image' in row) {
-                  const Nome        = String(row.name ?? '').trim();
-                  const Ruolo       = String(row.role ?? '').trim();
-                  const Squadra     = String(row.team ?? '').trim();
-                  const Immagine    = String(row.image ?? '').trim();
-                  const ValoreBase  = Number(row.base ?? row.ValoreBase ?? 0) || 0;
-                  return { Nome, Ruolo, Squadra, ValoreBase, Immagine };
-                }
-          }
-          // Altrimenti, prova per posizione come sul server
-          const get = (i) => Array.isArray(row) ? String(row[i] ?? '').trim()
-                : String((row?.[String(i)] ?? row?.[i] ?? '')).trim();
-          const MAP = { P:'Portiere', D:'Difensore', C:'Centrocampista', A:'Attaccante' };
-          const Nome      = get(1);
-          const roleCode  = get(3).toUpperCase().slice(0,1);
-          const Ruolo     = MAP[roleCode] || '';
-          const Squadra   = get(9);
-          const Immagine  = get(15);
-          const ValoreBase = 0;
-          return { Nome, Ruolo, Squadra, ValoreBase, Immagine };
-        }
-
-
-	async function onUploadCsv(){
-	  const f = $('csvFile')?.files?.[0];
-	  if (!f) { setStatus('Seleziona un CSV', false, true); return; }
-
-	  // helper: attende il prossimo 'players-list' (one-shot) fino a timeout
-	  const waitForPlayersList = (timeoutMs = 7000) => new Promise((resolve, reject) => {
-		let done = false;
-		const onMsg = (ev) => {
-		  try {
-			const d = JSON.parse(ev.data);
-			if (d?.type === 'players-list' && Array.isArray(d.players)) {
-			  if (done) return;
-			  done = true;
-			  try { ws.removeEventListener('message', onMsg); } catch {}
-			  clearTimeout(t);
-			  resolve(d.players);
-			}
-		  } catch {}
-		};
-		const t = setTimeout(() => {
-		  if (done) return;
-		  done = true;
-		  try { ws.removeEventListener('message', onMsg); } catch {}
-		  reject(new Error('Timeout in attesa dei giocatori dal server'));
-		}, timeoutMs);
-		ws.addEventListener('message', onMsg);
-	  });
-
-	  const fd = new FormData();
-	  fd.append('file', f);
-
-	  try {
-		const r = await fetch('/upload-players', { method: 'POST', body: fd });
-		const j = await r.json();
-		if (!j.success) throw new Error(j.error || 'Upload fallito');
-
-		// Caso A: il server ritorna già players
-		let raw = Array.isArray(j.players) ? j.players : null;
-
-		// Caso B: attendi il broadcast WS
-		if (!raw) {
-		  setStatus(`Upload riuscito, elaboro… (${j.count ?? '—'} giocatori)`, true);
-		  raw = await waitForPlayersList(7000);
-		}
-
-		playersCache = raw.map(canonicalRowFront).filter(p => p.Nome);
-		calledPlayers = new Set();
-
-		// opzionale: id locale stabile per debug/UI
-		let autoinc = 1;
-		playersCache.forEach(p => { if (!p._id) p._id = `p_${autoinc++}`; });
-
-		setStatus(`CSV caricato ✅ (${playersCache.length} giocatori)`, true);
-		renderPlayers();
-		nomHydrateTeams();
-		nomHydrateRoles();
-		nomApplyFilters();
-
-	  } catch (e) {
-		setStatus('Errore upload CSV: ' + (e?.message || e), false, true);
-	  }
+	function canonicalRowFront(row) {
+	  const r = normalizeKeysFront(row);
+	  const Nome     = (r.Nome ?? r.nome ?? r.NOME ?? r.Player ?? r.Giocatore ?? '').toString().trim();
+	  const Ruolo    = (r.Ruolo ?? r.ruolo ?? r.Role ?? '').toString().trim();
+	  const Squadra  = (r.Squadra ?? r.squadra ?? r.Team ?? '').toString().trim();
+	  const VBraw    = (r.ValoreBase ?? r['Valore Base'] ?? r.Base ?? r.base ?? 0);
+	  const ValoreBase = Number.parseInt(String(VBraw).replace(',', '.'), 10) || 0;
+	  const Immagine = (r.Immagine ?? r.Image ?? r.Foto ?? r.Photo ?? r.img ?? r.image ?? '').toString().trim();
+	  return { Nome, Ruolo, Squadra, ValoreBase, Immagine };
 	}
 
+	function onUploadCsv(){
+	  const f = $('csvFile')?.files?.[0];
+	  if (!f) { setStatus('Seleziona un CSV', false, true); return; }
+	  const fd = new FormData();
+	  fd.append('csv', f);
 
+	  fetch('/upload', { method:'POST', body: fd })
+		.then(r => r.json())
+		.then(j => {
+		  if (!j.success) throw new Error(j.error || 'Upload fallito');
+
+		  const raw = Array.isArray(j.players) ? j.players : [];
+		  playersCache = raw.map(canonicalRowFront).filter(p => p.Nome);
+		  calledPlayers = new Set();
+
+		  // opzionale: id stabile per debug
+		  let autoinc = 1;
+		  playersCache.forEach(p => { if (!p._id) p._id = `p_${autoinc++}`; });
+
+		  setStatus(`CSV caricato ✅ (${playersCache.length} giocatori)`, true);
+		  renderPlayers(); // userà la view
+		  nomHydrateTeams();
+		  nomHydrateRoles();
+		  nomApplyFilters();
+		})
+		.catch(e => setStatus('Errore upload CSV: '+e.message, false, true));
+	}
 
 
 	
@@ -2453,7 +2262,7 @@ function doNominatePlayer(p){
 		const img = (p.Immagine || '').toString().trim();
 		if (img) {
 		  const src = img.startsWith('/') ? img :
-					  /^https?:\/\//i.test(img) ? img : '';
+					  /^https?:\/\//i.test(img) ? `/img-proxy?u=${encodeURIComponent(img)}` : '';
 		  if (src) thumb = `<img src="${src}" alt="" style="height:36px;width:auto;border-radius:6px;border:1px solid #eee" onerror="this.style.display='none'">`;
 		}
 
@@ -3088,8 +2897,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		  <button class="btn btn-danger" id="logoutBtn">Logout</button>
 		`;
 		document.body.appendChild(logoutBar);
-	  // nascosta finché non si entra
-	  try { logoutBar.style.display = 'none'; } catch {}
 	  // Stato iniziale bidder: bottoni disabilitati e righe nascoste
 	  setBidButtonsEnabled(false);
 	  const metaRowInit = document.getElementById('bidderMetaRow');
@@ -3111,25 +2918,6 @@ document.addEventListener('DOMContentLoaded', () => {
 	window.onHostStopRound  = onHostStopRound;
   </script>
 </head>
-<body>
-<div id="pauseBanner">⏸ Asta in pausa</div>
-<div id="presence" aria-live="polite"></div>
-
-<!-- Controlli host: mostrare solo se host -->
-<div id="hostPresenceTools" style="display:none; margin:6px 0 10px;">
-  <button class="btn" id="btnRollcall">Controlla tutti online</button>
-</div>
-
-<!-- Modale roll-call -->
-<div id="rollcallModal">
-  <div class="box">
-    <h3 style="margin:0 0 10px;">Stato partecipanti</h3>
-    <div id="rollcallContent" class="mono" style="font-size:14px; white-space:pre-wrap;"></div>
-    <div style="text-align:right; margin-top:12px;">
-      <button class="btn" id="btnCloseRollcall">Chiudi</button>
-    </div>
-  </div>
-</div>
-</body>
+<body></body>
 </html>
 
