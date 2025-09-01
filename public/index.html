@@ -1587,7 +1587,7 @@ function doNominatePlayer(p){
               renderUsers(usersCache);
               renderInviteUsersSelect();
               if (myRole === 'bidder' && myParticipantId) {
-                const me = usersCache.find(u => u.id === myParticipantId);
+                const me = usersCache.find(u => u.participantId === myParticipantId);
                 if (me) updateBidderBudget(me);
               }
             }).catch(()=>{
@@ -1600,7 +1600,7 @@ function doNominatePlayer(p){
             renderUsers(usersCache);
             renderInviteUsersSelect();
             if (myRole === 'bidder' && myParticipantId) {
-              const me = usersCache.find(u => u.id === myParticipantId);
+              const me = usersCache.find(u => u.participantId === myParticipantId);
               if (me) updateBidderBudget(me);
             }
           }
