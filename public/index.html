@@ -878,8 +878,8 @@
 	// Crea invito per l’utente selezionato (solo su click)
 	document.addEventListener('click', async (e) => {
 	  if (!e.target || e.target.id !== 'inviteCreateBtn') return;
-	  const sel = document.getElementById('inviteUserSelect');
-	  if (!sel || !sel.value) { showToast('Seleziona un partecipante', 'warn'); return; }
+          const sel = document.getElementById('inviteUserSelect');
+          if (!sel || sel.selectedIndex < 0) { showToast('Seleziona un partecipante', 'warn'); return; }
 	  if (invitesBusy) return;
 	  invitesBusy = true; e.target.disabled = true;
 
