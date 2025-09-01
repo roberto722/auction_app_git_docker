@@ -1700,7 +1700,7 @@ function doNominatePlayer(p){
 	
         function getMyUser(){
           if (!myParticipantId) return null;
-          return (usersCache||[]).find(u => u.id === myParticipantId) || null;
+          return (usersCache||[]).find(u => u.participantId === myParticipantId) || null;
         }
 
 	function getMyMaxBid(){
@@ -2051,7 +2051,7 @@ function doNominatePlayer(p){
 
                 const tdActions = tr.lastElementChild;
 
-                const isMe = (u.id === myParticipantId);
+                const isMe = (u.participantId === myParticipantId);
 
                 // helper per creare bottoni coerenti
                 const addBtn = (label, cb, { title='', className='btn', disabled=false, ariaLabel='' } = {}) => {
