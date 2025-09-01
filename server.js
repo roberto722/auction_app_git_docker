@@ -108,8 +108,21 @@ function normalizeKeys(obj) {
   return out;
 }
 
-// Rende omogenea una riga del CSV (accetta varianti di header)
+// Rende omogenea una riga del CSV (accetta varianti di header o indici numerici)
 function canonicalRow(row) {
+  // Se la riga è un array o ha chiavi numeriche, mappa gli indici
+  if (Array.isArray(row) || Object.keys(row).some(k => /^\d+$/.test(k))) {
+    const arr = Array.isArray(row)
+      ? row
+      : Object.keys(row).sort((a, b) => a - b).map(k => row[k]);
+    const Nome    = (arr[1]  ?? '').toString().trim();
+    const Ruolo   = (arr[3]  ?? '').toString().trim();
+    const Squadra = (arr[9]  ?? '').toString().trim();
+    const Immagine = (arr[15] ?? '').toString().trim();
+    return { Nome, Ruolo, Squadra, ValoreBase: 0, Immagine };
+  }
+
+  // Caso standard: usa gli header
   const r = normalizeKeys(row);
 
   const Nome    = (r.Nome ?? r.nome ?? r.NOME ?? r.Player ?? r.Giocatore ?? '').toString().trim();
@@ -125,27 +138,36 @@ function canonicalRow(row) {
 }
 
 
-app.post('/upload', upload.single('csv'), (req, res) => {
-  const tmp = [];
-  fs.createReadStream(req.file.path)
-    .pipe(csv()) // usiamo csv-parser; normalizziamo noi le chiavi
-    .on('data', (rawRow) => {
-      try {
-        const p = canonicalRow(rawRow);
-        if (p.Nome) tmp.push(p); // scarta righe senza nome
-      } catch { /* ignora righe malformate */ }
-    })
-    .on('end', () => {
-      try { fs.unlinkSync(req.file.path); } catch {}
-      players = tmp;
-      if (players[0]) console.log('[CSV] Prima riga normalizzata:', players[0]);
-      broadcast({ type: 'players-list', players }); // invia al frontend
-      res.json({ success: true, players });
-    })
-    .on('error', (err) => {
-      try { fs.unlinkSync(req.file.path); } catch {}
-      res.status(400).json({ success: false, error: String(err) });
-    });
+app.post('/upload', upload.single('csv'), async (req, res) => {
+  const parseCsv = (opts) => new Promise((resolve, reject) => {
+    const rows = [];
+    fs.createReadStream(req.file.path)
+      .pipe(csv(opts))
+      .on('data', (rawRow) => {
+        try {
+          const p = canonicalRow(rawRow);
+          if (p.Nome) rows.push(p);
+        } catch { /* ignora */ }
+      })
+      .on('end', () => resolve(rows))
+      .on('error', reject);
+  });
+
+  try {
+    let list = await parseCsv();
+    if (!list.length) {
+      // probabile assenza di header: riparsiamo con indici numerici
+      list = await parseCsv({ headers: false });
+    }
+    try { fs.unlinkSync(req.file.path); } catch {}
+    players = list;
+    if (players[0]) console.log('[CSV] Prima riga normalizzata:', players[0]);
+    broadcast({ type: 'players-list', players });
+    res.json({ success: true, players });
+  } catch (err) {
+    try { fs.unlinkSync(req.file.path); } catch {}
+    res.status(400).json({ success: false, error: String(err) });
+  }
 });
 
 // === Round Robin (1 nomina per turno) ===
