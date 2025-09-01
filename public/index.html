@@ -534,14 +534,15 @@
 	let playersSortDir = 'asc';   // 'asc' | 'desc'
 	let playersPage = 1;
 	let playersPageSize = 25;
-	let playersTeamsSet = new Set(); // popolato dal CSV per il filtro squadre
+    let playersTeamsSet = new Set(); // popolato dal CSV per il filtro squadre
     let myRole = null; // 'host' | 'monitor' | 'bidder'
     let myId = null;
+    let myParticipantId = null;
     let usersCache = [];
-	let pendingHostLogin = false;
-	let pendingJoinName = '';
-	let auctionActive = false;  // true quando c’è un’asta in corso (per tutti i ruoli)
-	let calledPlayers = new Set();
+        let pendingHostLogin = false;
+        let pendingJoinName = '';
+        let auctionActive = false;  // true quando c’è un’asta in corso (per tutti i ruoli)
+        let calledPlayers = new Set();
 	
 	let isConnected = false;
     let reconnectTimer = null;
@@ -570,8 +571,8 @@
 	  try { localStorage.removeItem('hostPin'); } catch {}
 
 	  // chiudi eventuale WS
-	  try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, 'logout'); } catch {}
-	  ws = null; isHost = false; myRole = null; myId = null;
+          try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, 'logout'); } catch {}
+          ws = null; isHost = false; myRole = null; myId = null; myParticipantId = null;
 
 	  // torna alla schermata iniziale
 	  showLogoutBar(false);
@@ -969,7 +970,7 @@ function onHostStopRound(){
   ensureWS(()=> ws.send(JSON.stringify({ type:'host:stop-round' })));
 }
 
-function isMyTurn(){ return roundMode && myId && currentNominatorId === myId; }
+function isMyTurn(){ return roundMode && myParticipantId && currentNominatorId === myParticipantId; }
 
 function renderRoundInfo(){
   const box = document.getElementById('roundInfo'); // se hai un box host opzionale
@@ -1470,8 +1471,9 @@ function doNominatePlayer(p){
 
         // 🔹 JOIN riuscito (bidder/monitor)
         if (d.type === 'joined') {
-		  myRole = d.role || 'bidder';
-		  if (d.clientId) myId = d.clientId;
+                  myRole = d.role || 'bidder';
+                  if (d.clientId) myId = d.clientId;
+                  if (d.participantId) myParticipantId = d.participantId;
 
 		  // Se stiamo facendo login host, NON cambiare UI qui.
 		  if (pendingHostLogin) {
@@ -1584,8 +1586,8 @@ function doNominatePlayer(p){
               usersCache = j.participants || base;
               renderUsers(usersCache);
               renderInviteUsersSelect();
-              if (myRole === 'bidder' && myId) {
-                const me = usersCache.find(u => u.id === myId);
+              if (myRole === 'bidder' && myParticipantId) {
+                const me = usersCache.find(u => u.id === myParticipantId);
                 if (me) updateBidderBudget(me);
               }
             }).catch(()=>{
@@ -1597,8 +1599,8 @@ function doNominatePlayer(p){
             usersCache = base;
             renderUsers(usersCache);
             renderInviteUsersSelect();
-            if (myRole === 'bidder' && myId) {
-              const me = usersCache.find(u => u.id === myId);
+            if (myRole === 'bidder' && myParticipantId) {
+              const me = usersCache.find(u => u.id === myParticipantId);
               if (me) updateBidderBudget(me);
             }
           }
@@ -1696,10 +1698,10 @@ function doNominatePlayer(p){
       return Math.max(0, c - Math.max(0, tot - 1));
     }
 	
-	function getMyUser(){
-	  if (!myId) return null;
-	  return (usersCache||[]).find(u => u.id === myId) || null;
-	}
+        function getMyUser(){
+          if (!myParticipantId) return null;
+          return (usersCache||[]).find(u => u.id === myParticipantId) || null;
+        }
 
 	function getMyMaxBid(){
 	  const me = getMyUser();
@@ -2049,7 +2051,7 @@ function doNominatePlayer(p){
 
                 const tdActions = tr.lastElementChild;
 
-                const isMe = (u.id === myId);
+                const isMe = (u.id === myParticipantId);
 
                 // helper per creare bottoni coerenti
                 const addBtn = (label, cb, { title='', className='btn', disabled=false, ariaLabel='' } = {}) => {
