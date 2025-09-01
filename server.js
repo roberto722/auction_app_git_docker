@@ -6,6 +6,7 @@ const WebSocket = require('ws');
 const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
+const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
 const HOST_PIN = process.env.HOST_PIN || '1234';
 
@@ -17,6 +18,49 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/health', (_req, res) => res.type('text').send('ok'));
+
+// --- Proxy per immagini esterne (es. content.fantacalcio.it) ---
+const ALLOWED_IMG_HOSTS = ['content.fantacalcio.it'];
+const MAX_IMG_SIZE = 5 * 1024 * 1024; // 5 MB
+
+app.get('/img-proxy', async (req, res) => {
+  const u = req.query.u;
+  if (!u) return res.status(400).type('text').send('missing url');
+
+  let url;
+  try {
+    url = new URL(u);
+  } catch {
+    return res.status(400).type('text').send('invalid url');
+  }
+
+  if (!/^https?:$/.test(url.protocol)) {
+    return res.status(400).type('text').send('invalid protocol');
+  }
+  if (ALLOWED_IMG_HOSTS.length && !ALLOWED_IMG_HOSTS.includes(url.hostname)) {
+    return res.status(400).type('text').send('domain not allowed');
+  }
+
+  try {
+    const upstream = await fetch(url.href, { size: MAX_IMG_SIZE });
+    if (!upstream.ok) {
+      return res.status(500).type('text').send('upstream error');
+    }
+
+    const ct = upstream.headers.get('content-type') || 'application/octet-stream';
+    res.set('Content-Type', ct);
+    const cl = upstream.headers.get('content-length');
+    if (cl) res.set('Content-Length', cl);
+
+    upstream.body.on('error', () => {
+      if (!res.headersSent) res.status(500).type('text').send('stream error');
+    });
+    upstream.body.pipe(res);
+  } catch (err) {
+    console.error('/img-proxy error:', err);
+    res.status(500).type('text').send('fetch error');
+  }
+});
 
 
 // === Upload CSV (HTTP) — versione robusta ===
