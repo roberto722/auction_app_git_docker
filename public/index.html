@@ -2090,16 +2090,26 @@ function doNominatePlayer(p){
 	  }
 	  return out;
 	}
-	function canonicalRowFront(row) {
-	  const r = normalizeKeysFront(row);
-	  const Nome     = (r.Nome ?? r.nome ?? r.NOME ?? r.Player ?? r.Giocatore ?? '').toString().trim();
-	  const Ruolo    = (r.Ruolo ?? r.ruolo ?? r.Role ?? '').toString().trim();
-	  const Squadra  = (r.Squadra ?? r.squadra ?? r.Team ?? '').toString().trim();
-	  const VBraw    = (r.ValoreBase ?? r['Valore Base'] ?? r.Base ?? r.base ?? 0);
-	  const ValoreBase = Number.parseInt(String(VBraw).replace(',', '.'), 10) || 0;
-	  const Immagine = (r.Immagine ?? r.Image ?? r.Foto ?? r.Photo ?? r.img ?? r.image ?? '').toString().trim();
-	  return { Nome, Ruolo, Squadra, ValoreBase, Immagine };
-	}
+        function canonicalRowFront(row) {
+          if (Array.isArray(row) || Object.keys(row).some(k => /^\d+$/.test(k))) {
+            const arr = Array.isArray(row)
+              ? row
+              : Object.keys(row).sort((a, b) => a - b).map(k => row[k]);
+            const Nome    = (arr[1]  ?? '').toString().trim();
+            const Ruolo   = (arr[3]  ?? '').toString().trim();
+            const Squadra = (arr[9]  ?? '').toString().trim();
+            const Immagine = (arr[15] ?? '').toString().trim();
+            return { Nome, Ruolo, Squadra, ValoreBase: 0, Immagine };
+          }
+          const r = normalizeKeysFront(row);
+          const Nome     = (r.Nome ?? r.nome ?? r.NOME ?? r.Player ?? r.Giocatore ?? '').toString().trim();
+          const Ruolo    = (r.Ruolo ?? r.ruolo ?? r.Role ?? '').toString().trim();
+          const Squadra  = (r.Squadra ?? r.squadra ?? r.Team ?? '').toString().trim();
+          const VBraw    = (r.ValoreBase ?? r['Valore Base'] ?? r.Base ?? r.base ?? 0);
+          const ValoreBase = Number.parseInt(String(VBraw).replace(',', '.'), 10) || 0;
+          const Immagine = (r.Immagine ?? r.Image ?? r.Foto ?? r.Photo ?? r.img ?? r.image ?? '').toString().trim();
+          return { Nome, Ruolo, Squadra, ValoreBase, Immagine };
+        }
 
 	function onUploadCsv(){
 	  const f = $('csvFile')?.files?.[0];
