@@ -23,6 +23,9 @@ app.get('/health', (_req, res) => res.type('text').send('ok'));
 const ALLOWED_IMG_HOSTS = ['content.fantacalcio.it'];
 const MAX_IMG_SIZE = 5 * 1024 * 1024; // 5 MB
 
+// Mapping dei ruoli da lettera a nome esteso
+const ROLE_MAP = { A: 'Attaccante', D: 'Difensore', C: 'Centrocampista', P: 'Portiere' };
+
 app.get('/img-proxy', async (req, res) => {
   const u = req.query.u;
   if (!u) return res.status(400).type('text').send('missing url');
@@ -160,7 +163,8 @@ function canonicalRow(row) {
       ? row
       : Object.keys(row).sort((a, b) => a - b).map(k => row[k]);
     const Nome    = (arr[1]  ?? '').toString().trim();
-    const Ruolo   = (arr[3]  ?? '').toString().trim();
+    const rawRole = (arr[3]  ?? '').toString().trim();
+    const Ruolo   = ROLE_MAP[(rawRole || '').toUpperCase()] || rawRole;
     const Squadra = (arr[9]  ?? '').toString().trim();
     const Immagine = (arr[15] ?? '').toString().trim();
     return { Nome, Ruolo, Squadra, ValoreBase: 0, Immagine };
@@ -170,7 +174,8 @@ function canonicalRow(row) {
   const r = normalizeKeys(row);
 
   const Nome    = (r.Nome ?? r.nome ?? r.NOME ?? r.Player ?? r.Giocatore ?? '').toString().trim();
-  const Ruolo   = (r.Ruolo ?? r.ruolo ?? r.Role ?? '').toString().trim();
+  const rawRole = (r.Ruolo ?? r.ruolo ?? r.Role ?? '').toString().trim();
+  const Ruolo   = ROLE_MAP[(rawRole || '').toUpperCase()] || rawRole;
   const Squadra = (r.Squadra ?? r.squadra ?? r.Team ?? '').toString().trim();
   const VBraw   = (r.ValoreBase ?? r['Valore Base'] ?? r.Base ?? r.base ?? 0);
   const ValoreBase = Number.parseInt(String(VBraw).replace(',', '.'), 10) || 0;

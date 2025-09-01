@@ -2082,28 +2082,31 @@ function doNominatePlayer(p){
 
     // === Giocatori (CSV) ===
     // --- helper locali per normalizzare una riga CSV ---
-	function normalizeKeysFront(obj) {
-	  const out = {};
-	  for (const k in obj) {
-		const nk = k.replace(/^\uFEFF/, '').trim(); // rimuove BOM + spazi
-		out[nk] = obj[k];
-	  }
-	  return out;
-	}
+        function normalizeKeysFront(obj) {
+          const out = {};
+          for (const k in obj) {
+                const nk = k.replace(/^\uFEFF/, '').trim(); // rimuove BOM + spazi
+                out[nk] = obj[k];
+          }
+          return out;
+        }
+        const ROLE_MAP = { A:'Attaccante', D:'Difensore', C:'Centrocampista', P:'Portiere' };
         function canonicalRowFront(row) {
           if (Array.isArray(row) || Object.keys(row).some(k => /^\d+$/.test(k))) {
             const arr = Array.isArray(row)
               ? row
               : Object.keys(row).sort((a, b) => a - b).map(k => row[k]);
             const Nome    = (arr[1]  ?? '').toString().trim();
-            const Ruolo   = (arr[3]  ?? '').toString().trim();
+            const rawRole = (arr[3]  ?? '').toString().trim();
+            const Ruolo   = ROLE_MAP[(rawRole || '').toUpperCase()] || rawRole;
             const Squadra = (arr[9]  ?? '').toString().trim();
             const Immagine = (arr[15] ?? '').toString().trim();
             return { Nome, Ruolo, Squadra, ValoreBase: 0, Immagine };
           }
           const r = normalizeKeysFront(row);
           const Nome     = (r.Nome ?? r.nome ?? r.NOME ?? r.Player ?? r.Giocatore ?? '').toString().trim();
-          const Ruolo    = (r.Ruolo ?? r.ruolo ?? r.Role ?? '').toString().trim();
+          const rawRole  = (r.Ruolo ?? r.ruolo ?? r.Role ?? '').toString().trim();
+          const Ruolo    = ROLE_MAP[(rawRole || '').toUpperCase()] || rawRole;
           const Squadra  = (r.Squadra ?? r.squadra ?? r.Team ?? '').toString().trim();
           const VBraw    = (r.ValoreBase ?? r['Valore Base'] ?? r.Base ?? r.base ?? 0);
           const ValoreBase = Number.parseInt(String(VBraw).replace(',', '.'), 10) || 0;
