@@ -561,6 +561,7 @@
     let myId = null;
     let myParticipantId = null;
     let usersCache = [];
+    let rosterCache = {};
         let pendingHostLogin = false;
         let pendingJoinName = '';
         let auctionActive = false;  // true quando c’è un’asta in corso (per tutti i ruoli)
@@ -1606,11 +1607,14 @@ function doNominatePlayer(p){
 			document.getElementById('monitorCard')?.style?.setProperty('display', 'none');
 			document.getElementById('hostCard')?.style?.setProperty('display', 'block');
 
-			// chiedi subito la lista utenti
-			try { ws.send(JSON.stringify({ type:'host:get-users' })); } catch {}
-			renderUsers(usersCache);
-		  } else {
-			// PIN errato → torna alla login “normale”
+                        // chiedi subito la lista utenti
+                        try {
+                          ws.send(JSON.stringify({ type:'host:get-users' }));
+                          ws.send(JSON.stringify({ type:'host:get-rosters' }));
+                        } catch {}
+                        renderUsers(usersCache);
+                  } else {
+                        // PIN errato → torna alla login “normale”
 			pendingHostLogin = false;
 			setStatus('PIN errato ❌', false, true);
 		  }
@@ -1635,6 +1639,7 @@ function doNominatePlayer(p){
               usersCache = j.participants || base;
               renderUsers(usersCache);
               renderInviteUsersSelect();
+              renderRosters(rosterCache);
               if (myRole === 'bidder' && myParticipantId) {
                 const me = usersCache.find(u => u.participantId === myParticipantId);
                 if (me) updateBidderBudget(me);
@@ -1643,16 +1648,24 @@ function doNominatePlayer(p){
               usersCache = base;
               renderUsers(usersCache);
               renderInviteUsersSelect();
+              renderRosters(rosterCache);
             });
           } else {
             usersCache = base;
             renderUsers(usersCache);
             renderInviteUsersSelect();
+            renderRosters(rosterCache);
             if (myRole === 'bidder' && myParticipantId) {
               const me = usersCache.find(u => u.participantId === myParticipantId);
               if (me) updateBidderBudget(me);
             }
           }
+          return;
+        }
+
+        if (d.type === 'roster-update') {
+          rosterCache = d.roster || {};
+          renderRosters(rosterCache);
           return;
         }
 
@@ -2240,9 +2253,70 @@ function doNominatePlayer(p){
 		  );
 		}
 
-		tb.appendChild(tr);
-	  });
-	}
+          tb.appendChild(tr);
+          });
+        }
+
+        function renderRosters(map){
+          rosterCache = map || rosterCache || {};
+          const wrap = $('rosterList');
+          if (!wrap) return;
+          wrap.innerHTML = '';
+
+          for (const pid of Object.keys(rosterCache)) {
+                const playerArr = Array.isArray(rosterCache[pid]) ? rosterCache[pid] : [];
+                const user = (usersCache||[]).find(u => u.participantId === pid);
+                const bidderName = user ? (user.name || pid) : pid;
+                const bidderCredits = user ? Number(user.credits ?? 0) : 0;
+
+                const bidDiv = document.createElement('div');
+                bidDiv.className = 'roster-bidder';
+                bidDiv.innerHTML = `<h3>${escapeHtml(bidderName)} <span class="mono">${bidderCredits}</span></h3>`;
+
+                const groups = {};
+                playerArr.forEach(pl => {
+                  const f = pl.fascia || '—';
+                  (groups[f] = groups[f] || []).push(pl);
+                });
+
+                Object.keys(groups).sort().forEach(f => {
+                  const gDiv = document.createElement('div');
+                  gDiv.className = 'roster-group';
+                  const gTitle = document.createElement('h4');
+                  gTitle.textContent = f;
+                  gDiv.appendChild(gTitle);
+
+                  const ul = document.createElement('ul');
+                  groups[f].forEach(pl => {
+                        const li = document.createElement('li');
+                        li.className = 'roster-player';
+                        const imgSrc = pl.img ? `/img-proxy?u=${encodeURIComponent(pl.img)}` : '/placeholder.jpg';
+                        li.innerHTML = `<img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:cover;"> <span>${escapeHtml(pl.name||'')}</span> <span class="mono">${pl.price ?? 0}</span>`;
+                        const btnRem = document.createElement('button');
+                        btnRem.textContent = 'Remove';
+                        btnRem.className = 'btn btn-danger btn-sm';
+                        btnRem.onclick = () => ensureWS(()=>ws.send(JSON.stringify({ type:'host:remove-player', participantId: pid, playerId: pl.id })));
+                        const btnRe = document.createElement('button');
+                        btnRe.textContent = 'Reassign';
+                        btnRe.className = 'btn btn-ghost btn-sm';
+                        btnRe.onclick = () => {
+                          const bidders = (usersCache||[]).filter(u => u.participantId && u.participantId !== pid);
+                          const choices = bidders.map(u => `${u.participantId} - ${u.name}`).join('\n');
+                          const toId = prompt('Assegna a quale partecipante?\n'+choices, bidders[0]?.participantId || '');
+                          if (toId) ensureWS(()=>ws.send(JSON.stringify({ type:'host:reassign-player', fromId: pid, toId, playerId: pl.id })));
+                        };
+                        li.appendChild(btnRem);
+                        li.appendChild(btnRe);
+                        ul.appendChild(li);
+                  });
+
+                  gDiv.appendChild(ul);
+                  bidDiv.appendChild(gDiv);
+                });
+
+                wrap.appendChild(bidDiv);
+          }
+        }
 
     // === Giocatori (CSV) ===
     // --- helper locali per normalizzare una riga CSV ---
@@ -2886,11 +2960,11 @@ document.addEventListener('DOMContentLoaded', () => {
 			</div>
 
 			<!-- FULL WIDTH: Utenti -->
-			<div class="section full">
-			  <div class="section-title">Utenti</div>
-			  <div class="table-wrap">
-				<table>
-				  <thead>
+                        <div class="section full">
+                          <div class="section-title">Utenti</div>
+                          <div class="table-wrap">
+                                <table>
+                                  <thead>
                                         <tr>
                                           <th>Nome</th><th>Ruolo</th><th>Stato</th><th>Crediti</th><th>Spesi</th><th>POR</th><th>DIF</th><th>CEN</th><th>ATT</th><th>Azioni</th>
                                         </tr>
@@ -2899,9 +2973,14 @@ document.addEventListener('DOMContentLoaded', () => {
                                 </table>
                           </div>
                         </div>
-			
-			<div class="section full" id="invitesSection">
-			  <div class="section-title">Inviti</div>
+
+                        <div id="rosterTab" class="section full">
+                          <div class="section-title">Rosters</div>
+                          <div id="rosterList"></div>
+                        </div>
+
+                        <div class="section full" id="invitesSection">
+                          <div class="section-title">Inviti</div>
 
 			  <!-- Crea invito PRIMA che l'utente entri -->
 			  <div class="row">

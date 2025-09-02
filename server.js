@@ -1084,6 +1084,16 @@ wss.on('connection', (ws) => {
           return;
         }
 
+        if (msg.type === 'host:get-rosters') {
+          const me = clients.get(clientId);
+          if (!me || !me.isHost) {
+                ws.send(JSON.stringify({ type: 'error', message: 'Non autorizzato' }));
+                return;
+          }
+          broadcastRoster();
+          return;
+        }
+
         if (msg.type === 'host:remove-player' && clients.get(clientId).isHost) {
           removePlayer(String(msg.participantId), String(msg.playerId));
           broadcastRoster();
@@ -1091,7 +1101,9 @@ wss.on('connection', (ws) => {
         }
 
         if (msg.type === 'host:reassign-player' && clients.get(clientId).isHost) {
-          movePlayer(String(msg.fromPid), String(msg.toPid), String(msg.playerId));
+          const from = String(msg.fromPid ?? msg.fromId ?? '');
+          const to = String(msg.toPid ?? msg.toId ?? '');
+          movePlayer(from, to, String(msg.playerId));
           broadcastRoster();
           return;
         }
