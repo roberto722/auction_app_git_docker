@@ -1847,9 +1847,12 @@ function doNominatePlayer(p){
     function applyAuctionPayload(d) {
 	  const isHM = (myRole === 'host' || myRole === 'monitor');
 
-	  // Aggiorna prezzo e top bidder sempre (anche su new-bid)
-	  currentPrice  = Number(d.price ?? d.amount ?? currentPrice ?? 0);
-	  currentBidder = d.bidder ?? d.name ?? currentBidder ?? null;
+          // Aggiorna prezzo e top bidder sempre (anche su new-bid)
+          currentPrice  = Number(d.price ?? d.amount ?? currentPrice ?? 0);
+          const base = Number(currentPrice) || 0;
+          $('bidAmount')?.value = String(base + 1);
+          $('bidAmountMobile')?.value = String(base + 1);
+          currentBidder = d.bidder ?? d.name ?? currentBidder ?? null;
 
 	  // Aggiorna auctionActive SOLO quando il payload è informativo
 	  // - auction-started / state -> possiamo dedurre se c'è un item
