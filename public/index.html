@@ -526,6 +526,8 @@
     // === Stato & helpers ===
     let ws = null, isHost = false;
     let currentPrice = 0, currentBidder = null, currentItem = null;
+    let last3Cache = [];
+    let showBidderDetails = false;
     let countdownVal = 0, tInt = null; // tInt userà requestAnimationFrame
     let playersCache = [];     // tutti i giocatori (dal CSV)
 	let playersView  = [];     // giocatori attualmente mostrati (filtrati/ordinati)
@@ -968,6 +970,12 @@ function onHostStartRound(){
 }
 function onHostStopRound(){
   ensureWS(()=> ws.send(JSON.stringify({ type:'host:stop-round' })));
+}
+
+function onToggleBidderDetails(){
+  const cb = document.getElementById('toggleBidderDetails');
+  const enabled = !!cb?.checked;
+  ensureWS(()=> ws.send(JSON.stringify({ type:'host:set-bidder-details', enabled })));
 }
 
 function isMyTurn(){ return roundMode && myParticipantId && currentNominatorId === myParticipantId; }
@@ -1495,26 +1503,42 @@ function doNominatePlayer(p){
 		  }
 		  document.getElementById('meName') && (document.getElementById('meName').textContent = d.name || '');
 		  return;
-		}
+        }
 
-		// update round state dentro handler “state / auction-started / new-bid”
-		if (d.type === 'state' || d.type === 'auction-started' || d.type === 'new-bid') {
-		  if ('roundMode' in d) roundMode = !!d.roundMode;
-		  if ('nominationOrder' in d && Array.isArray(d.nominationOrder)) roundOrder = d.nominationOrder;
-		  if ('currentNominatorId' in d) currentNominatorId = d.currentNominatorId;
-					  
-		  if (myRole === 'monitor') {
-			setMonPrice(d.amount || d.price || 0);
-			renderLast3Chips(d.last3 || []);
-			// opzionale: un leggero “tick” di countdown se vuoi
-			// paintFancyCountdown(d.secondsRimasti ?? ...);
-		  }
+        if (d.type === 'show-bidder-details') {
+          showBidderDetails = !!d.enabled;
+          const cb = document.getElementById('toggleBidderDetails');
+          if (cb) cb.checked = showBidderDetails;
+          applyAuctionPayload({ type: 'state', item: showBidderDetails ? currentItem : null, playerName: currentItem ? currentItem.name : null, price: currentPrice, bidder: currentBidder, last3: last3Cache });
+          return;
+        }
+
+        // update round state dentro handler “state / auction-started / new-bid”
+        if (d.type === 'state' || d.type === 'auction-started' || d.type === 'new-bid') {
+          if ('roundMode' in d) roundMode = !!d.roundMode;
+          if ('nominationOrder' in d && Array.isArray(d.nominationOrder)) roundOrder = d.nominationOrder;
+          if ('currentNominatorId' in d) currentNominatorId = d.currentNominatorId;
+          if ('showBidderDetails' in d) {
+            showBidderDetails = !!d.showBidderDetails;
+            const cb = document.getElementById('toggleBidderDetails');
+            if (cb) cb.checked = showBidderDetails;
+          }
+          if (Array.isArray(d.last3)) last3Cache = d.last3;
+          if (d.item) currentItem = d.item;
+          else if (d.playerName != null) currentItem = { ...(currentItem||{}), name: d.playerName };
+
+          if (myRole === 'monitor') {
+            setMonPrice(d.amount || d.price || 0);
+            renderLast3Chips(d.last3 || []);
+            // opzionale: un leggero “tick” di countdown se vuoi
+            // paintFancyCountdown(d.secondsRimasti ?? ...);
+          }
 		  
 		  applyAuctionPayload(d);
-		  renderRoundInfo();
-		  renderBidderNominateBox();
-		  return;
-		}
+                  renderRoundInfo();
+                  renderBidderNominateBox();
+                  return;
+                }
 
 		// handler specifico broadcast round
 		if (d.type === 'round-state') {
@@ -1651,13 +1675,22 @@ function doNominatePlayer(p){
 		  auctionActive = false;
 		  setBidButtonsEnabled(false);
 
-		  // Nascondi righe meta/countdown nel pannello bidder e pulisci campi
-		  const metaRow = document.getElementById('bidderMetaRow');
-		  const cntRow  = document.getElementById('bidderCountdownRow');
-		  if (metaRow) metaRow.style.display = 'none';
-		  if (cntRow)  cntRow.style.display  = 'none';
-		  setText('itemPriceBid', 0);
-		  setText('itemBidderBid', '—');
+                  // Nascondi righe meta/countdown nel pannello bidder e pulisci campi
+                  const metaRow = document.getElementById('bidderMetaRow');
+                  const cntRow  = document.getElementById('bidderCountdownRow');
+                  const roleRow = document.getElementById('bidderRoleRow');
+                  const teamRow = document.getElementById('bidderTeamRow');
+                  const last3Row = document.getElementById('bidderLast3Row');
+                  if (metaRow) metaRow.style.display = 'none';
+                  if (cntRow)  cntRow.style.display  = 'none';
+                  if (roleRow) roleRow.style.display = 'none';
+                  if (teamRow) teamRow.style.display = 'none';
+                  if (last3Row) last3Row.style.display = 'none';
+                  setText('itemPriceBid', 0);
+                  setText('itemBidderBid', '—');
+                  setText('itemRoleBid', '—');
+                  setText('itemTeamBid', '—');
+                  setText('itemLast3Bid', '—');
 
 		  // reset colori/immagine monitor/host
 		  const monRoleEl  = $('monRole');
@@ -1931,12 +1964,36 @@ function doNominatePlayer(p){
 	  }
 
 	  // === BIDDER ===
-	  if (name != null) setText('itemNameBid', name);
-	  if (typeof d.seconds === 'number') startCountdown(d.seconds);
+          if (name != null) setText('itemNameBid', name);
+          if (typeof d.seconds === 'number') startCountdown(d.seconds);
+          const metaRow = document.getElementById('bidderMetaRow');
+          const cntRow  = document.getElementById('bidderCountdownRow');
+          const roleRow = document.getElementById('bidderRoleRow');
+          const teamRow = document.getElementById('bidderTeamRow');
+          const last3Row = document.getElementById('bidderLast3Row');
 
-	  // Non spegnere su new-bid: usa lo stato calcolato sopra
-	  setBidButtonsEnabled(auctionActive);
-	}
+          if (showBidderDetails) {
+            if (metaRow) { metaRow.style.display = 'block'; setText('itemPriceBid', currentPrice); setText('itemBidderBid', currentBidder || '—'); }
+            if (cntRow)  cntRow.style.display = 'block';
+            if (roleRow) { roleRow.style.display = 'block'; setText('itemRoleBid', d.item?.role || currentItem?.role || '—'); }
+            if (teamRow) { teamRow.style.display = 'block'; setText('itemTeamBid', d.item?.team || currentItem?.team || '—'); }
+            if (last3Row) {
+              last3Row.style.display = 'block';
+              const l3 = d.last3 || last3Cache || [];
+              const txt = l3.map(e => `${e.name} (${e.amount})`).join(', ');
+              setText('itemLast3Bid', txt || '—');
+            }
+          } else {
+            if (metaRow) { metaRow.style.display = 'none'; setText('itemPriceBid', 0); setText('itemBidderBid', '—'); }
+            if (cntRow)  { cntRow.style.display = 'none'; setText('countdownBid', '—'); }
+            if (roleRow) { roleRow.style.display = 'none'; setText('itemRoleBid', '—'); }
+            if (teamRow) { teamRow.style.display = 'none'; setText('itemTeamBid', '—'); }
+            if (last3Row) { last3Row.style.display = 'none'; setText('itemLast3Bid', '—'); }
+          }
+
+          // Non spegnere su new-bid: usa lo stato calcolato sopra
+          setBidButtonsEnabled(auctionActive);
+        }
 
 
 
@@ -2602,6 +2659,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                   <button class="btn btn-ghost" onclick="onHostStopRound()">Stop RR</button>
                                   <button id="btnSkipNominator" class="btn">Salta turno nominatore</button>
                                   <button id="btnKickAnon" class="btn btn-danger">Elimina tutti</button>
+                                  <label style="display:flex; align-items:center; gap:4px;">
+                                    <input type="checkbox" id="toggleBidderDetails" onchange="onToggleBidderDetails()" />
+                                    Dettagli bidder
+                                  </label>
                                   <button class="btn btn-ghost" onclick="ensureWS(()=>ws.send(JSON.stringify({type:'host:get-users'})))">Aggiorna lista</button>
                                   <button class="btn btn-danger" onclick="onEndItem()">Chiudi asta</button>
                                 </div>
@@ -2810,6 +2871,9 @@ document.addEventListener('DOMContentLoaded', () => {
           <div>Giocatore: <b id="itemNameBid">—</b></div>
           <div id="bidderMetaRow">Prezzo: <b id="itemPriceBid">0</b> — da <b id="itemBidderBid">—</b></div>
           <div id="bidderCountdownRow">Countdown: <b id="countdownBid">—</b></div>
+          <div id="bidderRoleRow" style="display:none;">Ruolo: <b id="itemRoleBid">—</b></div>
+          <div id="bidderTeamRow" style="display:none;">Squadra: <b id="itemTeamBid">—</b></div>
+          <div id="bidderLast3Row" style="display:none;">Ultimi 3: <b id="itemLast3Bid">—</b></div>
           <div class="row">
             <input id="bidAmount" type="number" min="1" placeholder="Offerta precisa" />
             <button onclick="onBidCustom()">Punta</button>
@@ -2947,10 +3011,16 @@ document.addEventListener('DOMContentLoaded', () => {
 		document.body.appendChild(logoutBar);
 	  // Stato iniziale bidder: bottoni disabilitati e righe nascoste
 	  setBidButtonsEnabled(false);
-	  const metaRowInit = document.getElementById('bidderMetaRow');
-	  const cntRowInit  = document.getElementById('bidderCountdownRow');
-	  if (metaRowInit) metaRowInit.style.display = 'none';
-	  if (cntRowInit)  cntRowInit.style.display  = 'none';
+          const metaRowInit = document.getElementById('bidderMetaRow');
+          const cntRowInit  = document.getElementById('bidderCountdownRow');
+          const roleRowInit = document.getElementById('bidderRoleRow');
+          const teamRowInit = document.getElementById('bidderTeamRow');
+          const last3RowInit = document.getElementById('bidderLast3Row');
+          if (metaRowInit) metaRowInit.style.display = 'none';
+          if (cntRowInit)  cntRowInit.style.display  = 'none';
+          if (roleRowInit) roleRowInit.style.display = 'none';
+          if (teamRowInit) teamRowInit.style.display = 'none';
+          if (last3RowInit) last3RowInit.style.display = 'none';
     }
 
     // Esporta solo le funzioni usate dai bottoni nel DOM
@@ -2962,8 +3032,9 @@ document.addEventListener('DOMContentLoaded', () => {
     window.onBidCustom = onBidCustom;
     window.onUploadCsv = onUploadCsv;
     window.onSetBudgets = onSetBudgets;
-	window.onHostStartRound = onHostStartRound;
-	window.onHostStopRound  = onHostStopRound;
+        window.onHostStartRound = onHostStartRound;
+        window.onHostStopRound  = onHostStopRound;
+        window.onToggleBidderDetails = onToggleBidderDetails;
   </script>
 </head>
 <body></body>

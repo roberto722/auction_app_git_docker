@@ -373,6 +373,7 @@ let logEntries = [];      // [{type,time,...}]
 let bidHistory = [];      // [{t, name, amount}]
 
 let baseCountdownSeconds = 12; // impostazione del gestore (esposta in UI)
+let showBidderDetails = false; // se i bidder vedono dettagli completi dell'item
 
 function dynamicSecondsFor(price) {
   const b = Math.max(5, baseCountdownSeconds); // difesa minima
@@ -532,18 +533,23 @@ function sendStateToClient(client, wsRef) {
 
   const payloadCommon = {
     type: 'state',
-    countdownSeconds: baseCountdownSeconds, 
-    seconds: secondsEstimate,                
+    countdownSeconds: baseCountdownSeconds,
+    seconds: secondsEstimate,
     price: currentPrice,
     bidder: currentBidder,
     last3: lastNBids ? lastNBids(3) : [],
-    roundMode, nominationOrder, currentNominatorId
+    roundMode, nominationOrder, currentNominatorId,
+    showBidderDetails
   };
 
   if (client.role === 'host' || client.role === 'monitor') {
     wsRef.send(JSON.stringify({ ...payloadCommon, item: currentItem || null }));
   } else {
-    wsRef.send(JSON.stringify({ ...payloadCommon, playerName: currentItem ? currentItem.name : null }));
+    if (showBidderDetails) {
+      wsRef.send(JSON.stringify({ ...payloadCommon, item: currentItem || null }));
+    } else {
+      wsRef.send(JSON.stringify({ ...payloadCommon, playerName: currentItem ? currentItem.name : null }));
+    }
   }
 }
 
@@ -557,17 +563,31 @@ function broadcastAuctionStartedTailoredWithSeconds(secs){
         seconds: secs,
         price: currentPrice,
         bidder: currentBidder,
-        last3: []
+        last3: [],
+        showBidderDetails
       }));
     } else {
-      c.ws.send(JSON.stringify({
-        type: 'auction-started',
-        playerName: currentItem?.name || '—',
-        seconds: secs,
-        price: currentPrice,
-        bidder: currentBidder,
-        last3: []
-      }));
+      if (showBidderDetails) {
+        c.ws.send(JSON.stringify({
+          type: 'auction-started',
+          item: currentItem,
+          seconds: secs,
+          price: currentPrice,
+          bidder: currentBidder,
+          last3: [],
+          showBidderDetails
+        }));
+      } else {
+        c.ws.send(JSON.stringify({
+          type: 'auction-started',
+          playerName: currentItem?.name || '—',
+          seconds: secs,
+          price: currentPrice,
+          bidder: currentBidder,
+          last3: [],
+          showBidderDetails
+        }));
+      }
     }
   }
 }
@@ -886,13 +906,24 @@ wss.on('connection', (ws) => {
 
     // Solo host
     if (msg.type === 'host:set-timer' && clients.get(clientId).isHost) {
-	  const sec = Math.max(5, Math.floor(Number(msg.seconds) || 30));
-	  baseCountdownSeconds = sec;
-	  pushLog({ type: 'timer-set', time: now(), seconds: sec });
-	  // l'UI (host) mostra il "predefinito" impostato; i reset effettivi possono essere più bassi
-	  broadcast({ type: 'timer-updated', seconds: sec });
-	  return;
-	}
+      const sec = Math.max(5, Math.floor(Number(msg.seconds) || 30));
+      baseCountdownSeconds = sec;
+      pushLog({ type: 'timer-set', time: now(), seconds: sec });
+      // l'UI (host) mostra il "predefinito" impostato; i reset effettivi possono essere più bassi
+      broadcast({ type: 'timer-updated', seconds: sec });
+      return;
+    }
+
+    if (msg.type === 'host:set-bidder-details' && clients.get(clientId).isHost) {
+      showBidderDetails = !!msg.enabled;
+      broadcast({ type: 'show-bidder-details', enabled: showBidderDetails });
+      for (const [, c] of clients) {
+        if (c.ws.readyState === WebSocket.OPEN) {
+          sendStateToClient(c, c.ws);
+        }
+      }
+      return;
+    }
 
     if (msg.type === 'host:start-item' && clients.get(clientId).isHost) {
       const name = (msg.name || '').trim() || 'Senza titolo';
