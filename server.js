@@ -452,6 +452,19 @@ function broadcastUsers() {
   broadcast({ type: 'user-list', users });
 }
 
+function broadcastRoster() {
+  const roster = {};
+  for (const p of listParticipants()) {
+    roster[p.id] = Array.isArray(p.players) ? p.players : [];
+  }
+  const s = JSON.stringify({ type: 'roster-update', roster });
+  for (const [, c] of clients) {
+    if ((c.role === 'host' || c.role === 'monitor') && c.ws.readyState === WebSocket.OPEN) {
+      c.ws.send(s);
+    }
+  }
+}
+
 function startTimer(secs) {
   if (timerHandle) clearTimeout(timerHandle);
   const s = Math.max(1, Math.floor(secs || baseCountdownSeconds));
@@ -487,6 +500,17 @@ function endAuction(reason = 'manual') {
 
   const winnerName = winnerId ? (clients.get(winnerId)?.name || 'Nessuno') : 'Nessuno';
   const amount = currentPrice || Number(currentItem.startPrice || 0) || 0;
+
+  if (winnerId) {
+    addPlayer(winnerId, {
+      id: currentItem.id,
+      name: currentItem.name,
+      img: currentItem.image,
+      fascia: currentItem.fascia,
+      price: amount
+    });
+    broadcastRoster();
+  }
 
   // 2) Detrae budget/slot se abbiamo un vincitore e il ruolo è valido
   const rkey = roleKeyFromText(currentItem?.role || '');
@@ -729,16 +753,17 @@ wss.on('connection', (ws) => {
 	  }
 	  ensureBudgetFields(c);
 
-	  ws.send(JSON.stringify({
-		type: 'joined',
-		success: true,
-		name: c.name,
-		role: c.role,
-		clientId,
-		participantId: c.participantId
-	  }));
+          ws.send(JSON.stringify({
+                type: 'joined',
+                success: true,
+                name: c.name,
+                role: c.role,
+                clientId,
+                participantId: c.participantId
+          }));
           ws.send(JSON.stringify({ type: 'players-list', players }));
           sendStateToClient(c, ws);
+          if (c.isHost || c.role === 'monitor') broadcastRoster();
           broadcastUsers();
           addToRoundIfEligible(c.participantId);
           broadcastRoundState();
@@ -774,6 +799,7 @@ wss.on('connection', (ws) => {
       ws.send(JSON.stringify({ type: 'joined', success: true, name, role: 'monitor', clientId }));
       ws.send(JSON.stringify({ type: 'players-list', players }));
       sendStateToClient(c, ws);
+      broadcastRoster();
       broadcastUsers();
       // monitor non vengono aggiunti al giro nominatori
       return;
@@ -789,11 +815,12 @@ wss.on('connection', (ws) => {
 		c.role = 'host'; 
 		ws.send(JSON.stringify({ type: 'host-auth', success: true, clientId }));
 		ws.send(JSON.stringify({ type: 'log-update', entries: logEntries }));
-		ws.send(JSON.stringify({ type: 'players-list', players }));
-		sendStateToClient(c, ws);
-	  } else {
-		ws.send(JSON.stringify({ type: 'host-auth', success: false }));
-	  }
+                ws.send(JSON.stringify({ type: 'players-list', players }));
+                sendStateToClient(c, ws);
+                broadcastRoster();
+          } else {
+                ws.send(JSON.stringify({ type: 'host-auth', success: false }));
+          }
 
 	  broadcastUsers();
 	  return;
@@ -1031,12 +1058,12 @@ wss.on('connection', (ws) => {
 
 
 	// Il gestore chiede la lista utenti corrente (sync immediato)
-	if (msg.type === 'host:get-users') {
-	  const me = clients.get(clientId);
-	  if (!me || !me.isHost) { 
-		ws.send(JSON.stringify({ type: 'error', message: 'Non autorizzato' }));
-		return;
-	  }
+        if (msg.type === 'host:get-users') {
+          const me = clients.get(clientId);
+          if (!me || !me.isHost) {
+                ws.send(JSON.stringify({ type: 'error', message: 'Non autorizzato' }));
+                return;
+          }
 
 	  const users = [];
 	  for (const [id, c] of clients) {
@@ -1053,13 +1080,37 @@ wss.on('connection', (ws) => {
 		  initialSlotsByRole: cloneSlots(c.initialSlotsByRole || {})
 		});
 	  }
-	  try { ws.send(JSON.stringify({ type: 'user-list', users })); } catch {}
-	  return;
-	}
+          try { ws.send(JSON.stringify({ type: 'user-list', users })); } catch {}
+          return;
+        }
 
-	// === Host: avvia/stop round robin (una nomina per turno) ===
-	if (msg.type === 'host:start-round' && clients.get(clientId).isHost) {
-	  const strategy = (msg.strategy === 'name') ? 'name' : 'random';
+        if (msg.type === 'host:get-rosters') {
+          const me = clients.get(clientId);
+          if (!me || !me.isHost) {
+                ws.send(JSON.stringify({ type: 'error', message: 'Non autorizzato' }));
+                return;
+          }
+          broadcastRoster();
+          return;
+        }
+
+        if (msg.type === 'host:remove-player' && clients.get(clientId).isHost) {
+          removePlayer(String(msg.participantId), String(msg.playerId));
+          broadcastRoster();
+          return;
+        }
+
+        if (msg.type === 'host:reassign-player' && clients.get(clientId).isHost) {
+          const from = String(msg.fromPid ?? msg.fromId ?? '');
+          const to = String(msg.toPid ?? msg.toId ?? '');
+          movePlayer(from, to, String(msg.playerId));
+          broadcastRoster();
+          return;
+        }
+
+        // === Host: avvia/stop round robin (una nomina per turno) ===
+        if (msg.type === 'host:start-round' && clients.get(clientId).isHost) {
+          const strategy = (msg.strategy === 'name') ? 'name' : 'random';
           nominationOrder = buildNominationOrder(strategy);
           roundMode = true;
           nominationIndex = 0;
@@ -1209,7 +1260,7 @@ wss.on('connection', (ws) => {
 require('dotenv').config();
 const { v4: uuid } = require('uuid');
 const { sign, verify } = require('./lib/token');
-const { getParticipant, upsertParticipant, deleteParticipant, listParticipants } = require('./lib/registry');
+const { getParticipant, upsertParticipant, deleteParticipant, listParticipants, addPlayer, removePlayer, movePlayer } = require('./lib/registry');
 
 function listParticipantsWithOnline() {
   const regs = listParticipants();
