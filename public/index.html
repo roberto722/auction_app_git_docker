@@ -108,7 +108,7 @@
 	.stat-label { font-size:12px; color:#666; }
 	.stat-value { font-size:18px; font-weight:700; }
 
-	.host-actions { display:flex; gap:8px; }
+        .host-controls { display:flex; flex-wrap:wrap; gap:8px; }
 
 	.host-grid { display:grid; gap:16px; grid-template-columns: 1.2fr 1fr; }
 	.host-grid .full { grid-column: 1 / -1; } /* ← prende tutta la riga */
@@ -2592,35 +2592,37 @@ document.addEventListener('DOMContentLoaded', () => {
 			  </div>
 			</div>
 
-			<div class="host-actions">
-			  <select id="roundStrategy" class="btn">
-				<option value="random">Ordine casuale</option>
-				<option value="name">Ordine alfabetico (nome)</option>
-			  </select>
-			  <button class="btn" onclick="onHostStartRound()">Avvia RR</button>
-			  <button class="btn btn-ghost" onclick="onHostStopRound()">Stop RR</button>
-			  
-			  <button id="btnSkipNominator" class="btn">Salta turno nominatore</button>
-			  <button id="btnKickAnon" class="btn btn-danger">Elimina tutti</button>
-
-			  <button class="btn btn-ghost" onclick="ensureWS(()=>ws.send(JSON.stringify({type:'host:get-users'})))">Aggiorna lista</button>
-			  <button class="btn btn-danger" onclick="onEndItem()">Chiudi asta</button>
-			</div>
-			<div id="roundInfo" class="stat" style="margin-left:8px;">
-			  <div class="stat-label">Round Robin</div>
+                        <div id="roundInfo" class="stat" style="margin-left:8px;">
+                          <div class="stat-label">Round Robin</div>
 			  <div class="stat-value">disattivato</div>
 			</div>
 		  </div>
 
-		  <!-- Griglia 2 colonne -->
-		  <div class="host-grid">
-			<!-- Colonna sinistra -->
-			<div class="host-col">
-			  <!-- Configurazione rapida -->
-			  <div class="section">
-				<div class="section-title">Configurazione</div>
-				<div class="row">
-				  <input id="timerInp" type="number" min="5" value="12" placeholder="Countdown (s)" />
+                  <!-- Griglia 2 colonne -->
+                  <div class="host-grid">
+                        <!-- Colonna sinistra -->
+                        <div class="host-col">
+                          <!-- Controlli -->
+                          <div class="section">
+                                <div class="section-title">Controlli</div>
+                                <div class="host-controls">
+                                  <select id="roundStrategy" class="btn">
+                                        <option value="random">Ordine casuale</option>
+                                        <option value="name">Ordine alfabetico (nome)</option>
+                                  </select>
+                                  <button class="btn" onclick="onHostStartRound()">Avvia RR</button>
+                                  <button class="btn btn-ghost" onclick="onHostStopRound()">Stop RR</button>
+                                  <button id="btnSkipNominator" class="btn">Salta turno nominatore</button>
+                                  <button id="btnKickAnon" class="btn btn-danger">Elimina tutti</button>
+                                  <button class="btn btn-ghost" onclick="ensureWS(()=>ws.send(JSON.stringify({type:'host:get-users'})))">Aggiorna lista</button>
+                                  <button class="btn btn-danger" onclick="onEndItem()">Chiudi asta</button>
+                                </div>
+                          </div>
+                          <!-- Configurazione rapida -->
+                          <div class="section">
+                                <div class="section-title">Configurazione</div>
+                                <div class="row">
+                                  <input id="timerInp" type="number" min="5" value="12" placeholder="Countdown (s)" />
 				  <button class="btn btn-primary" onclick="onSetTimer()">Imposta</button>
 				</div>
 
