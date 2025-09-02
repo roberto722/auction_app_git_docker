@@ -1847,9 +1847,12 @@ function doNominatePlayer(p){
     function applyAuctionPayload(d) {
 	  const isHM = (myRole === 'host' || myRole === 'monitor');
 
-	  // Aggiorna prezzo e top bidder sempre (anche su new-bid)
-	  currentPrice  = Number(d.price ?? d.amount ?? currentPrice ?? 0);
-	  currentBidder = d.bidder ?? d.name ?? currentBidder ?? null;
+          // Aggiorna prezzo e top bidder sempre (anche su new-bid)
+          currentPrice  = Number(d.price ?? d.amount ?? currentPrice ?? 0);
+          const base = Number(currentPrice) || 0;
+          $('bidAmount')?.value = String(base + 1);
+          $('bidAmountMobile')?.value = String(base + 1);
+          currentBidder = d.bidder ?? d.name ?? currentBidder ?? null;
 
 	  // Aggiorna auctionActive SOLO quando il payload è informativo
 	  // - auction-started / state -> possiamo dedurre se c'è un item
@@ -2562,23 +2565,38 @@ function doNominatePlayer(p){
           ensureWS(()=> ws.send(JSON.stringify({ type:'bid', amount: next })));
         }
 
-        function onBidMinus(step){
-          const s = step || 1;
-          const inp = $('bidAmount');
-          const mob = $('bidAmountMobile');
-          let cur = parseInt(inp?.value || '1', 10);
-          if (!Number.isFinite(cur)) cur = 1;
-          cur = Math.max(1, cur - s);
-          if (inp) inp.value = String(cur);
-          if (mob) mob.value = String(cur);
+        function onBidMobilePlus(){
+          if (!auctionActive) { showToast('Nessun giocatore in asta.', 'warn'); return; }
+
+          const base = Number(currentPrice) || 0;
+          const max  = getMyMaxBid();
+          let val = parseInt($('bidAmountMobile')?.value || '', 10);
+
+          if (Number.isFinite(val) && val > base) {
+                if (val > max) {
+                  if (max <= base) {
+                        showToast('Hai raggiunto il tuo limite di puntata.', 'warn');
+                        return;
+                  }
+                  val = max;
+                  showToast(`Offerta agganciata al tuo massimo: ${val}`, 'ok', 1800);
+                }
+                const inp = $('bidAmount');
+                const mob = $('bidAmountMobile');
+                if (inp) inp.value = String(val);
+                if (mob) mob.value = String(val);
+                ensureWS(()=> ws.send(JSON.stringify({ type:'bid', amount: val })));
+          } else {
+                onBidPlus(1);
+          }
         }
 
-	function onBidCustom(){
-	  if (!auctionActive) { showToast('Nessun giocatore in asta.', 'warn'); return; }
+        function onBidCustom(){
+          if (!auctionActive) { showToast('Nessun giocatore in asta.', 'warn'); return; }
 
-	  const base = Number(currentPrice) || 0;
-	  const max  = getMyMaxBid();
-	  let val = parseInt($('bidAmount')?.value||'0',10);
+          const base = Number(currentPrice) || 0;
+          const max  = getMyMaxBid();
+          let val = parseInt($('bidAmount')?.value||'0',10);
 
 	  if (!Number.isFinite(val) || val <= 0) {
 		showToast('Inserisci un importo valido.', 'warn'); return;
@@ -2983,10 +3001,8 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </div>
           <div id="bidBottomBar" class="bid-bottom-bar">
-            <button class="btn" aria-label="Diminuisci" onclick="onBidMinus(1)">−</button>
             <input id="bidAmountMobile" type="text" inputmode="numeric" />
-            <button class="btn" aria-label="Aumenta" onclick="onBidPlus(1)">+</button>
-            <button class="btn btn-primary" onclick="onBidCustom()">Punta</button>
+            <button class="btn" aria-label="Aumenta" onclick="onBidMobilePlus()">+</button>
           </div>
         </div>
 
@@ -3125,7 +3141,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.onStartPlayer = onStartPlayer;
     window.onEndItem = onEndItem;
     window.onBidPlus = onBidPlus;
-    window.onBidMinus = onBidMinus;
+    window.onBidMobilePlus = onBidMobilePlus;
     window.onBidCustom = onBidCustom;
     window.onUploadCsv = onUploadCsv;
     window.onSetBudgets = onSetBudgets;
