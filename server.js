@@ -1165,7 +1165,13 @@ wss.on('connection', (ws) => {
       pushLog({ type: 'bid', time: entry.t, item: currentItem, name: currentBidder, amount: currentPrice });
 
         const secs = dynamicSecondsFor(currentPrice);
-        broadcast({ type: 'new-bid', amount: currentPrice, name: currentBidder, last3: lastNBids(3), seconds: secs });
+        broadcast({
+          type: 'new-bid',
+          amount: currentPrice,
+          name: currentBidder,
+          last3: lastNBids(3),
+          seconds: secs,
+        });
         resetTimer(secs);
         return;
       }
