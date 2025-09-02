@@ -2571,26 +2571,14 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="card" id="hostCard" style="display:none;">
 		  <!-- Toolbar / stat -->
 		  <div class="host-toolbar">
-			<div class="stat-group">
-			  <div class="stat">
-				<div class="stat-label">Countdown predef.</div>
-				<div class="stat-value"><span id="timerCur">12</span>s</div>
-			  </div>
-			  <div class="stat">
-				<div class="stat-label">In corso</div>
-				<div class="stat-value">
-				  <span id="itemNameHost">—</span>
-				</div>
-			  </div>
-			  <div class="stat">
-				<div class="stat-label">Prezzo</div>
-				<div class="stat-value mono"><span id="itemPriceHost">0</span></div>
-			  </div>
-			  <div class="stat">
-				<div class="stat-label">Top bidder</div>
-				<div class="stat-value"><span id="itemBidderHost">—</span></div>
-			  </div>
-			</div>
+                        <div class="stat-group">
+                          <div class="stat">
+                                <div class="stat-label">In corso</div>
+                                <div class="stat-value">
+                                  <span id="itemNameHost">—</span>
+                                </div>
+                          </div>
+                        </div>
 
                         <div id="roundInfo" class="stat" style="margin-left:8px;">
                           <div class="stat-label">Round Robin</div>
@@ -2729,11 +2717,14 @@ document.addEventListener('DOMContentLoaded', () => {
 			  <!-- Asta corrente (dettaglio) -->
 			  <div class="section">
 				<div class="section-title">Asta corrente</div>
-				<div class="pill-row">
-				  <span class="pill-host"><b>Ruolo</b> <span id="itemRoleHost">—</span></span>
-				  <span class="pill-host"><b>Squadra</b> <span id="itemTeamHost">—</span></span>
-				  <span class="pill-host"><b>Countdown</b> <span id="countdownHost">—</span></span>
-				</div>
+                                <div class="pill-row">
+                                  <span class="pill-host"><b>Ruolo</b> <span id="itemRoleHost">—</span></span>
+                                  <span class="pill-host"><b>Squadra</b> <span id="itemTeamHost">—</span></span>
+                                  <span class="pill-host"><b>Countdown</b> <span id="countdownHost">—</span></span>
+                                  <span class="pill-host"><b>Prezzo</b> <span id="itemPriceHost">0</span></span>
+                                  <span class="pill-host"><b>Top bidder</b> <span id="itemBidderHost">—</span></span>
+                                  <span class="pill-host"><b>Countdown predef.</b> <span id="timerCur">12</span>s</span>
+                                </div>
 			  </div>
 			</div>
 
