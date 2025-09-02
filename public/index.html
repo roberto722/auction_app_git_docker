@@ -1554,7 +1554,7 @@ function doNominatePlayer(p){
             // paintFancyCountdown(d.secondsRimasti ?? ...);
           }
 
-          if (d.type === 'new-bid' && typeof d.seconds === 'number') {
+          if (d.type === 'new-bid' && Number.isFinite(d.seconds)) {
             startCountdown(d.seconds);
             if (myRole === 'monitor') paintFancyCountdown(d.seconds);
           }
