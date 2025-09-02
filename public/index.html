@@ -26,6 +26,8 @@
     #bidderCard { display: flex; flex-direction: column; height: 100%; }
     .player-display { display: flex; align-items: center; gap: 12px; }
     .player-photo { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+    .bidder-secondary { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+    .info-box { background:#f7f7f7; border:1px solid #e5e5e5; border-radius:8px; padding:8px 12px; }
     .quick-bid-wrap { margin-top: auto; }
     .quick-bid { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 12px; }
 
@@ -42,10 +44,14 @@
     .qbtn svg { width: 22px; height: 22px; opacity: .9; }
     .qbtn .label { display: inline-block; min-width: 58px; text-align: center; }
 
-    @media (max-width: 520px) {
+    @media (max-width: 600px) {
       .player-display { flex-direction: column; align-items: flex-start; }
       .quick-bid { grid-template-columns: 1fr; }
       .qbtn { width: 100%; }
+      .bidder-secondary { grid-template-columns: 1fr; }
+      #bidderBudgetBox, #bidderMetaBox { font-size:14px; padding:6px 8px; }
+      #bidderBudgetBox div, #bidderMetaBox div { margin:2px 0; }
+      #bidderNominateBox { font-size:14px; padding:10px; }
     }
 
     /* Monitor layout */
@@ -2901,16 +2907,20 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="card" id="bidderCard" style="display:none;">
           <h2>Partecipante</h2>
           <div>Ciao, <b id="meName">—</b></div>
-          <div id="bidderBudgetBox" class="card" style="margin-top:8px;">
-            <div><b>Crediti:</b> <span id="meCredits">0</span></div>
-            <div><b>Max puntata:</b> <span id="meMaxBid">0</span></div>
-            <div><b>Spesi:</b> <span id="meSpent">0</span></div>
-          </div>
           <div class="player-display">
             <img id="itemImgBid" class="player-photo" src="/placeholder.jpg" alt="" />
             <div class="player-info">
               <span id="itemNameBid">—</span>
               <div id="bidderMetaRow">Prezzo: <b id="itemPriceBid">0</b> — da <b id="itemBidderBid">—</b></div>
+            </div>
+          </div>
+          <div id="bidderSecondaryInfo" class="bidder-secondary">
+            <div id="bidderBudgetBox" class="info-box">
+              <div><b>Crediti:</b> <span id="meCredits">0</span></div>
+              <div><b>Max puntata:</b> <span id="meMaxBid">0</span></div>
+              <div><b>Spesi:</b> <span id="meSpent">0</span></div>
+            </div>
+            <div id="bidderMetaBox" class="info-box">
               <div id="bidderCountdownRow">Countdown: <b id="countdownBid">—</b></div>
               <div id="bidderRoleRow" style="display:none;">Ruolo: <b id="itemRoleBid">—</b></div>
               <div id="bidderTeamRow" style="display:none;">Squadra: <b id="itemTeamBid">—</b></div>
