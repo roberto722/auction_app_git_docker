@@ -1553,12 +1553,17 @@ function doNominatePlayer(p){
             // opzionale: un leggero “tick” di countdown se vuoi
             // paintFancyCountdown(d.secondsRimasti ?? ...);
           }
-		  
-		  applyAuctionPayload(d);
-                  renderRoundInfo();
-                  renderBidderNominateBox();
-                  return;
-                }
+
+          if (d.type === 'new-bid' && typeof d.seconds === 'number') {
+            startCountdown(d.seconds);
+            if (myRole === 'monitor') paintFancyCountdown(d.seconds);
+          }
+
+          applyAuctionPayload(d);
+          renderRoundInfo();
+          renderBidderNominateBox();
+          return;
+        }
 
 		// handler specifico broadcast round
 		if (d.type === 'round-state') {
@@ -1989,7 +1994,7 @@ function doNominatePlayer(p){
 		  renderLast3(d.last3);
 		  renderLast3Chips(d.last3);
 		}
-		if (typeof d.seconds === 'number') startCountdown(d.seconds);
+                  if (typeof d.seconds === 'number' && d.type !== 'new-bid') startCountdown(d.seconds);
 
 		// Abilita/disabilita i bottoni di puntata in base allo stato corrente
 		setBidButtonsEnabled(auctionActive);
@@ -2013,7 +2018,7 @@ function doNominatePlayer(p){
               imgBid.src = '/placeholder.jpg';
             }
           }
-          if (typeof d.seconds === 'number') startCountdown(d.seconds);
+            if (typeof d.seconds === 'number' && d.type !== 'new-bid') startCountdown(d.seconds);
           const metaRow = document.getElementById('bidderMetaRow');
           const cntRow  = document.getElementById('bidderCountdownRow');
           const roleRow = document.getElementById('bidderRoleRow');
