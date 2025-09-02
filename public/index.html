@@ -1852,6 +1852,7 @@ function doNominatePlayer(p){
           const base = Number(currentPrice) || 0;
           // Update both desktop and mobile bid inputs if they exist and aren't active
           const activeEl = document.activeElement;
+          // Update both desktop and mobile bid inputs if they exist
           const bidAmountEl = $('bidAmount');
           if (bidAmountEl && activeEl !== bidAmountEl) {
             bidAmountEl.value = String(base + 1);
