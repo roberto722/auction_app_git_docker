@@ -30,6 +30,7 @@
     .info-box { background:#f7f7f7; border:1px solid #e5e5e5; border-radius:8px; padding:8px 12px; }
     .quick-bid-wrap { margin-top: auto; }
     .quick-bid { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 12px; }
+    .bid-bottom-bar { position:fixed; bottom:0; left:0; right:0; display:none; justify-content:space-between; align-items:center; padding:8px; background:#fff; box-shadow:0 -2px 8px rgba(0,0,0,.1); z-index:9999; }
 
     .qbtn { position: relative; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 22px 24px; border: none; border-radius: 16px;
       background: linear-gradient(135deg, #f7f7f7, #ececec); box-shadow: 0 10px 20px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.7);
@@ -52,6 +53,9 @@
       #bidderBudgetBox, #bidderMetaBox { font-size:14px; padding:6px 8px; }
       #bidderBudgetBox div, #bidderMetaBox div { margin:2px 0; }
       #bidderNominateBox { font-size:14px; padding:10px; }
+      #bidInputRow { display:none; }
+      .bid-bottom-bar { display:flex; }
+      #bidderCard { padding-bottom:60px; }
     }
 
     /* Monitor layout */
@@ -2529,24 +2533,40 @@ function doNominatePlayer(p){
     function onEndItem(){ ensureWS(()=> ws.send(JSON.stringify({ type:'host:end-item' }))); }
 
     function onBidPlus(delta){
-	  if (!auctionActive) { showToast('Nessun giocatore in asta.', 'warn'); return; }
+          if (!auctionActive) { showToast('Nessun giocatore in asta.', 'warn'); return; }
 
-	  const base = Number(currentPrice) || 0;
-	  const max  = getMyMaxBid();
+          const base = Number(currentPrice) || 0;
+          const max  = getMyMaxBid();
 
-	  let next = base + delta;
-	  if (next > max) {
-		if (max <= base) {
-		  showToast('Hai raggiunto il tuo limite di puntata.', 'warn');
-		  return;
-		}
-		// aggancia al massimo consentito
-		next = max;
-		showToast(`Offerta agganciata al tuo massimo: ${next}`, 'ok', 1800);
-	  }
+          let next = base + delta;
+          if (next > max) {
+                if (max <= base) {
+                  showToast('Hai raggiunto il tuo limite di puntata.', 'warn');
+                  return;
+                }
+                // aggancia al massimo consentito
+                next = max;
+                showToast(`Offerta agganciata al tuo massimo: ${next}`, 'ok', 1800);
+          }
 
-	  ensureWS(()=> ws.send(JSON.stringify({ type:'bid', amount: next })));
-	}
+          const inp = $('bidAmount');
+          if (inp) inp.value = String(next);
+          const mob = $('bidAmountMobile');
+          if (mob) mob.value = String(next);
+
+          ensureWS(()=> ws.send(JSON.stringify({ type:'bid', amount: next })));
+        }
+
+        function onBidMinus(step){
+          const s = step || 1;
+          const inp = $('bidAmount');
+          const mob = $('bidAmountMobile');
+          let cur = parseInt(inp?.value || '1', 10);
+          if (!Number.isFinite(cur)) cur = 1;
+          cur = Math.max(1, cur - s);
+          if (inp) inp.value = String(cur);
+          if (mob) mob.value = String(cur);
+        }
 
 	function onBidCustom(){
 	  if (!auctionActive) { showToast('Nessun giocatore in asta.', 'warn'); return; }
@@ -2927,7 +2947,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <div id="bidderLast3Row" style="display:none;">Ultimi 3: <b id="itemLast3Bid">—</b></div>
             </div>
           </div>
-          <div class="row">
+          <div class="row" id="bidInputRow">
             <input id="bidAmount" type="number" min="1" placeholder="Offerta precisa" />
             <button onclick="onBidCustom()">Punta</button>
           </div>
@@ -2957,9 +2977,15 @@ document.addEventListener('DOMContentLoaded', () => {
               <small>Puoi nominare solo nel tuo turno e quando non c’è un’asta in corso.</small>
             </div>
           </div>
+          <div id="bidBottomBar" class="bid-bottom-bar">
+            <button class="btn" aria-label="Diminuisci" onclick="onBidMinus(1)">−</button>
+            <input id="bidAmountMobile" type="text" inputmode="numeric" />
+            <button class="btn" aria-label="Aumenta" onclick="onBidPlus(1)">+</button>
+            <button class="btn btn-primary" onclick="onBidCustom()">Punta</button>
+          </div>
         </div>
-		
-		<!-- Bidder: modale scelta giocatore -->
+
+                <!-- Bidder: modale scelta giocatore -->
 		<div id="nominateModal" style="display:none; position:fixed; inset:0; z-index:9998;">
 		  <div style="position:absolute; inset:0; background:rgba(0,0,0,.45)" onclick="closeNominateModal()"></div>
 		  <div style="position:relative; z-index:1; max-width:1000px; width:92vw; margin:5vh auto; background:#fff; border-radius:12px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,.25);">
@@ -3075,6 +3101,17 @@ document.addEventListener('DOMContentLoaded', () => {
           if (roleRowInit) roleRowInit.style.display = 'none';
           if (teamRowInit) teamRowInit.style.display = 'none';
           if (last3RowInit) last3RowInit.style.display = 'none';
+
+          const bidDesktop = document.getElementById('bidAmount');
+          const bidMobile  = document.getElementById('bidAmountMobile');
+          const syncBid = (src) => {
+                const val = parseInt(src.value || '0', 10) || 0;
+                if (bidDesktop && src !== bidDesktop) bidDesktop.value = String(val);
+                if (bidMobile  && src !== bidMobile)  bidMobile.value  = String(val);
+          };
+          bidDesktop?.addEventListener('input', e => syncBid(e.target));
+          bidMobile?.addEventListener('input', e => syncBid(e.target));
+          bidMobile?.addEventListener('focus', e => e.target.select());
     }
 
     // Esporta solo le funzioni usate dai bottoni nel DOM
@@ -3083,6 +3120,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.onStartPlayer = onStartPlayer;
     window.onEndItem = onEndItem;
     window.onBidPlus = onBidPlus;
+    window.onBidMinus = onBidMinus;
     window.onBidCustom = onBidCustom;
     window.onUploadCsv = onUploadCsv;
     window.onSetBudgets = onSetBudgets;
