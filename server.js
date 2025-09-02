@@ -458,11 +458,14 @@ function startTimer(secs) {
   timerHandle = setTimeout(() => endAuction('timeout'), s * 1000);
 }
 
-function resetTimer() {
-  // ricalcola in base al prezzo corrente
-  const secs = dynamicSecondsFor(currentPrice || Number(currentItem?.startPrice || 0) || 0);
-  startTimer(secs);
-  broadcast({ type: 'reset-timer', seconds: secs });
+function resetTimer(secs) {
+  // ricalcola in base al prezzo corrente (o usa override)
+  const s = Number.isFinite(secs)
+    ? Math.max(1, Math.floor(secs))
+    : dynamicSecondsFor(currentPrice || Number(currentItem?.startPrice || 0) || 0);
+  startTimer(s);
+  broadcast({ type: 'reset-timer', seconds: s });
+  return s;
 }
 
 
@@ -1161,10 +1164,11 @@ wss.on('connection', (ws) => {
       bidHistory.push(entry);
       pushLog({ type: 'bid', time: entry.t, item: currentItem, name: currentBidder, amount: currentPrice });
 
-      broadcast({ type: 'new-bid', amount: currentPrice, name: currentBidder, last3: lastNBids(3) });
-      resetTimer();
-      return;
-    }
+        const secs = dynamicSecondsFor(currentPrice);
+        broadcast({ type: 'new-bid', amount: currentPrice, name: currentBidder, last3: lastNBids(3), seconds: secs });
+        resetTimer(secs);
+        return;
+      }
   });
 
   ws.on('close', () => {
