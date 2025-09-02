@@ -1850,8 +1850,10 @@ function doNominatePlayer(p){
           // Aggiorna prezzo e top bidder sempre (anche su new-bid)
           currentPrice  = Number(d.price ?? d.amount ?? currentPrice ?? 0);
           const base = Number(currentPrice) || 0;
-          $('bidAmount')?.value = String(base + 1);
-          $('bidAmountMobile')?.value = String(base + 1);
+          const bidAmountEl = $('bidAmount');
+          if (bidAmountEl) bidAmountEl.value = String(base + 1);
+          const bidAmountMobileEl = $('bidAmountMobile');
+          if (bidAmountMobileEl) bidAmountMobileEl.value = String(base + 1);
           currentBidder = d.bidder ?? d.name ?? currentBidder ?? null;
 
 	  // Aggiorna auctionActive SOLO quando il payload è informativo
