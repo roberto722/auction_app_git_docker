@@ -1850,6 +1850,7 @@ function doNominatePlayer(p){
           // Aggiorna prezzo e top bidder sempre (anche su new-bid)
           currentPrice  = Number(d.price ?? d.amount ?? currentPrice ?? 0);
           const base = Number(currentPrice) || 0;
+          // Update both desktop and mobile bid inputs if they exist
           const bidAmountEl = $('bidAmount');
           if (bidAmountEl) bidAmountEl.value = String(base + 1);
           const bidAmountMobileEl = $('bidAmountMobile');
