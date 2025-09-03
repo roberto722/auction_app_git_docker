@@ -500,9 +500,11 @@ function endAuction(reason = 'manual') {
 
   const winnerName = winnerId ? (clients.get(winnerId)?.name || 'Nessuno') : 'Nessuno';
   const amount = currentPrice || Number(currentItem.startPrice || 0) || 0;
+  const wClient = winnerId ? clients.get(winnerId) : undefined;
+  const winnerPid = wClient?.participantId;
 
-  if (winnerId) {
-    addPlayer(winnerId, {
+  if (winnerPid) {
+    addPlayer(winnerPid, {
       id: currentItem.id,
       name: currentItem.name,
       img: currentItem.image,
@@ -514,13 +516,10 @@ function endAuction(reason = 'manual') {
 
   // 2) Detrae budget/slot se abbiamo un vincitore e il ruolo è valido
   const rkey = roleKeyFromText(currentItem?.role || '');
-  if (winnerId && rkey) {
-    const w = clients.get(winnerId);
-    if (w) {
-      ensureBudgetFields(w);
-      w.credits = Math.max(0, (w.credits || 0) - amount);
-      w.slotsByRole[rkey] = Math.max(0, (w.slotsByRole[rkey] || 0) - 1);
-    }
+  if (wClient && rkey) {
+    ensureBudgetFields(wClient);
+    wClient.credits = Math.max(0, (wClient.credits || 0) - amount);
+    wClient.slotsByRole[rkey] = Math.max(0, (wClient.slotsByRole[rkey] || 0) - 1);
   }
 
   // 3) Notifica esito asta
