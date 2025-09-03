@@ -14,10 +14,16 @@
     input, button { padding:8px; font-size:16px; }
     #status { padding:10px; border-radius:8px; background:#f5f5f5; min-height:2.2em; }
     .ok { color:#0a7a0a; } .err { color:#b00020; }
-    table { width:100%; border-collapse:collapse; }
-    th, td { border:1px solid #ddd; padding:6px; text-align:center; }
-    .big { font-size: 28px; font-weight: 700; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      table { width:100%; border-collapse:collapse; }
+      th, td { border:1px solid #ddd; padding:6px; text-align:center; }
+      .player-td {
+        display: flex;
+        max-width: 200px;
+        align-items: center;
+        justify-content: space-around;
+      }
+      .big { font-size: 28px; font-weight: 700; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
     /* Fullscreen base */
     html, body { height: 100%; }
@@ -2331,9 +2337,10 @@ function doNominatePlayer(p){
               const tr = document.createElement('tr');
               bidders.forEach(b => {
                 const player = byBidder[b.id][r][i];
-                const td = document.createElement('td');
-                if (player) {
-                  if (player.fascia) td.classList.add('fascia-' + player.fascia);
+                  const td = document.createElement('td');
+                  if (player) {
+                    td.classList.add('player-td');
+                    if (player.fascia) td.classList.add('fascia-' + player.fascia);
                   const imgSrc = player.img ? `/img-proxy?u=${encodeURIComponent(player.img)}` : '/placeholder.jpg';
                   td.innerHTML = `<img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:contain;"> <span>${escapeHtml(player.name||'')}</span> <span class="mono">${player.price ?? 0}</span>`;
                   if (myRole === 'host') {
