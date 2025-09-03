@@ -366,7 +366,7 @@ function skipCurrentNominator() {
 
 // === Stato asta (single room) ===
 const clients = new Map(); // id -> { ws, name, role: 'host'|'bidder'|'monitor', isHost, credits, slots }
-let currentItem = null;   // { name, startPrice, role?, fascia?, team?, image? }
+let currentItem = null;   // { id, name, startPrice, role?, fascia?, team?, image? }
 let currentPrice = 0;
 let currentBidder = null; // nome
 let minIncrement = 1;
@@ -962,8 +962,9 @@ wss.on('connection', (ws) => {
       const role = msg.role || '';
       const team = msg.team || '';
       const image = (msg.image || '').trim();
+      const id = msg.id || `pl_${Date.now()}`;
 
-      currentItem = { name, startPrice, role, fascia: role, team, image };
+      currentItem = { id, name, startPrice, role, fascia: role, team, image };
       currentPrice = startPrice;
       currentBidder = null;
       bidHistory = [];
@@ -985,8 +986,9 @@ wss.on('connection', (ws) => {
       const team = p.Squadra || '';
 
       const image = (p.Immagine || p.Image || p.Foto || p.Photo || p.img || p.image || '').toString().trim();
+      const id = p.id || `pl_${Date.now()}`;
 
-      currentItem = { name, startPrice, role, fascia: role, team, image };
+      currentItem = { id, name, startPrice, role, fascia: role, team, image };
       currentPrice = startPrice;
       currentBidder = null;
       bidHistory = [];
@@ -1183,19 +1185,20 @@ wss.on('connection', (ws) => {
 		return;
 	  }
 
-	  const p = msg.player || {};
-	  const name = String(p.Nome || p.name || '').trim();
-	  if (!name) { ws.send(JSON.stringify({ type:'error', message:'Giocatore non valido.' })); return; }
+          const p = msg.player || {};
+          const name = String(p.Nome || p.name || '').trim();
+          if (!name) { ws.send(JSON.stringify({ type:'error', message:'Giocatore non valido.' })); return; }
 
-	  const startPrice = Math.max(0, Math.floor(Number(p.ValoreBase || p.startPrice || 0)));
-	  const role  = p.Ruolo   || '';
-	  const team  = p.Squadra || '';
-	  const image = (p.Immagine || p.Image || p.Foto || p.Photo || p.img || p.image || '').toString().trim();
+          const startPrice = Math.max(0, Math.floor(Number(p.ValoreBase || p.startPrice || 0)));
+          const role  = p.Ruolo   || '';
+          const team  = p.Squadra || '';
+          const image = (p.Immagine || p.Image || p.Foto || p.Photo || p.img || p.image || '').toString().trim();
+          const id = p.id || `pl_${Date.now()}`;
 
-	  currentItem   = { name, startPrice, role, team, image };
-	  currentPrice  = startPrice;
-	  currentBidder = null;
-	  bidHistory    = [];
+          currentItem   = { id, name, startPrice, role, fascia: role, team, image };
+          currentPrice  = startPrice;
+          currentBidder = null;
+          bidHistory    = [];
 
 	  // Nel log teniamo il "predefinito" impostato dal gestore
 	  pushLog({ type:'auction-start', time: now(), item: currentItem, timer: baseCountdownSeconds, source:'round', by: caller.name });
