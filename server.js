@@ -364,7 +364,7 @@ function skipCurrentNominator() {
 
 // === Stato asta (single room) ===
 const clients = new Map(); // id -> { ws, name, role: 'host'|'bidder'|'monitor', isHost, credits, slots }
-let currentItem = null;   // { name, startPrice, role?, team?, image? }
+let currentItem = null;   // { name, startPrice, role?, fascia?, team?, image? }
 let currentPrice = 0;
 let currentBidder = null; // nome
 let minIncrement = 1;
@@ -961,7 +961,7 @@ wss.on('connection', (ws) => {
       const team = msg.team || '';
       const image = (msg.image || '').trim();
 
-      currentItem = { name, startPrice, role, team, image };
+      currentItem = { name, startPrice, role, fascia: role, team, image };
       currentPrice = startPrice;
       currentBidder = null;
       bidHistory = [];
@@ -981,10 +981,10 @@ wss.on('connection', (ws) => {
       const startPrice = Math.max(0, Math.floor(Number(p.ValoreBase || p.startPrice || 0)));
       const role = p.Ruolo || '';
       const team = p.Squadra || '';
-      
-	  const image = (p.Immagine || p.Image || p.Foto || p.Photo || p.img || p.image || '').toString().trim();
 
-      currentItem = { name, startPrice, role, team, image };
+      const image = (p.Immagine || p.Image || p.Foto || p.Photo || p.img || p.image || '').toString().trim();
+
+      currentItem = { name, startPrice, role, fascia: role, team, image };
       currentPrice = startPrice;
       currentBidder = null;
       bidHistory = [];
