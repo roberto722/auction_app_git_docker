@@ -14,7 +14,7 @@
     input, button { padding:8px; font-size:16px; }
     #status { padding:10px; border-radius:8px; background:#f5f5f5; min-height:2.2em; }
     .ok { color:#0a7a0a; } .err { color:#b00020; }
-      table { width:100%; border-collapse:collapse; }
+      table { border-collapse:collapse; }
       th, td { border:1px solid #ddd; padding:6px; text-align:center; }
       table.roster-table th {
         max-width: 200px;
@@ -27,6 +27,8 @@
         max-width: 200px;
         align-items: center;
         justify-content: space-around;
+		gap: 7px;
+		overflow: overlay;
       }
       .big { font-size: 28px; font-weight: 700; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
