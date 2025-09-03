@@ -376,6 +376,7 @@ let bidHistory = [];      // [{t, name, amount}]
 
 let baseCountdownSeconds = 12; // impostazione del gestore (esposta in UI)
 let showBidderDetails = false; // se i bidder vedono dettagli completi dell'item
+let showRosterToBidders = false;
 
 function dynamicSecondsFor(price) {
   const b = Math.max(5, baseCountdownSeconds); // difesa minima
@@ -461,7 +462,8 @@ function broadcastRoster() {
   }
   const s = JSON.stringify({ type: 'roster-update', roster });
   for (const [, c] of clients) {
-    if ((c.isHost || c.role === 'monitor') && c.ws.readyState === WebSocket.OPEN) {
+    if ((c.isHost || c.role === 'monitor' || (showRosterToBidders && c.role === 'bidder')) &&
+        c.ws.readyState === WebSocket.OPEN) {
       c.ws.send(s);
     }
   }
@@ -696,6 +698,10 @@ wss.on('connection', (ws) => {
         broadcastUsers();
         addToRoundIfEligible(c.participantId);
         broadcastRoundState();
+        if (showRosterToBidders) {
+          broadcast({ type: 'show-roster-bidders', enabled: true });
+        }
+        broadcastRoster();
       } catch (e) {
         try { ws.send(JSON.stringify({ type:'error', message: `Join fallita: ${e.message}` })); } catch {}
         try { ws.close(); } catch {}
@@ -763,13 +769,16 @@ wss.on('connection', (ws) => {
                 participantId: c.participantId
           }));
           ws.send(JSON.stringify({ type: 'players-list', players }));
-          sendStateToClient(c, ws);
-          if (c.isHost || c.role === 'monitor') broadcastRoster();
-          broadcastUsers();
-          addToRoundIfEligible(c.participantId);
-          broadcastRoundState();
-          return;
+        sendStateToClient(c, ws);
+        if (showRosterToBidders) {
+          broadcast({ type: 'show-roster-bidders', enabled: true });
         }
+        broadcastRoster();
+        broadcastUsers();
+        addToRoundIfEligible(c.participantId);
+        broadcastRoundState();
+        return;
+      }
 
 
     // Accesso diretto senza invito: consentito solo ai monitor con PIN
@@ -800,6 +809,9 @@ wss.on('connection', (ws) => {
       ws.send(JSON.stringify({ type: 'joined', success: true, name, role: 'monitor', clientId }));
       ws.send(JSON.stringify({ type: 'players-list', players }));
       sendStateToClient(c, ws);
+      if (showRosterToBidders) {
+        ws.send(JSON.stringify({ type: 'show-roster-bidders', enabled: true }));
+      }
       broadcastRoster();
       broadcastUsers();
       // monitor non vengono aggiunti al giro nominatori
@@ -814,10 +826,11 @@ wss.on('connection', (ws) => {
 	  if (ok) { 
 		c.isHost = true; 
 		c.role = 'host'; 
-		ws.send(JSON.stringify({ type: 'host-auth', success: true, clientId }));
-		ws.send(JSON.stringify({ type: 'log-update', entries: logEntries }));
+                ws.send(JSON.stringify({ type: 'host-auth', success: true, clientId }));
+                ws.send(JSON.stringify({ type: 'log-update', entries: logEntries }));
                 ws.send(JSON.stringify({ type: 'players-list', players }));
                 sendStateToClient(c, ws);
+                ws.send(JSON.stringify({ type: 'show-roster-bidders', enabled: showRosterToBidders }));
                 broadcastRoster();
           } else {
                 ws.send(JSON.stringify({ type: 'host-auth', success: false }));
@@ -953,6 +966,13 @@ wss.on('connection', (ws) => {
           sendStateToClient(c, c.ws);
         }
       }
+      return;
+    }
+
+    if (msg.type === 'host:set-roster-visibility' && clients.get(clientId).isHost) {
+      showRosterToBidders = !!msg.enabled;
+      broadcast({ type: 'show-roster-bidders', enabled: showRosterToBidders });
+      broadcastRoster();
       return;
     }
 

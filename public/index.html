@@ -555,9 +555,10 @@
     let currentPrice = 0, currentBidder = null, currentItem = null;
     let last3Cache = [];
     let showBidderDetails = false;
+    let showBidderRoster = false;
     let countdownVal = 0, tInt = null; // tInt userà requestAnimationFrame
     let playersCache = [];     // tutti i giocatori (dal CSV)
-	let playersView  = [];     // giocatori attualmente mostrati (filtrati/ordinati)
+        let playersView  = [];     // giocatori attualmente mostrati (filtrati/ordinati)
 	// Stato tabella giocatori (filtri/sort/paginazione)
 	let playersSortKey = 'Nome';  // 'Nome' | 'Ruolo' | 'Squadra' | 'ValoreBase'
 	let playersSortDir = 'asc';   // 'asc' | 'desc'
@@ -1004,6 +1005,12 @@ function onToggleBidderDetails(){
   const cb = document.getElementById('toggleBidderDetails');
   const enabled = !!cb?.checked;
   ensureWS(()=> ws.send(JSON.stringify({ type:'host:set-bidder-details', enabled })));
+}
+
+function onToggleBidderRoster(){
+  const cb = document.getElementById('toggleBidderRoster');
+  const enabled = !!cb?.checked;
+  ensureWS(()=> ws.send(JSON.stringify({ type:'host:set-roster-visibility', enabled })));
 }
 
 function isMyTurn(){ return roundMode && myParticipantId && currentNominatorId === myParticipantId; }
@@ -1526,11 +1533,13 @@ function doNominatePlayer(p){
 			const rowCountdown = document.getElementById('bidderCountdownRow'); if (rowCountdown) rowCountdown.style.display = 'none';
 			showLogoutBar(true);
 		  }
-		  if (myRole === 'monitor') {
-			  showMonitorCard();
-		  }
-		  document.getElementById('meName') && (document.getElementById('meName').textContent = d.name || '');
-		  return;
+                  if (myRole === 'monitor') {
+                          showMonitorCard();
+                  }
+                  document.getElementById('meName') && (document.getElementById('meName').textContent = d.name || '');
+                  const rosterCard = document.getElementById('rosterCard');
+                  if (rosterCard) rosterCard.style.display = (myRole === 'host' || (myRole === 'bidder' && showBidderRoster)) ? 'block' : 'none';
+                  return;
         }
 
         if (d.type === 'show-bidder-details') {
@@ -1538,6 +1547,15 @@ function doNominatePlayer(p){
           const cb = document.getElementById('toggleBidderDetails');
           if (cb) cb.checked = showBidderDetails;
           applyAuctionPayload({ type: 'state', item: showBidderDetails ? currentItem : null, playerName: currentItem ? currentItem.name : null, price: currentPrice, bidder: currentBidder, last3: last3Cache });
+          return;
+        }
+
+        if (d.type === 'show-roster-bidders') {
+          showBidderRoster = !!d.enabled;
+          const cb = document.getElementById('toggleBidderRoster');
+          if (cb) cb.checked = showBidderRoster;
+          const card = document.getElementById('rosterCard');
+          if (card) card.style.display = (myRole === 'host' || (myRole === 'bidder' && showBidderRoster)) ? 'block' : 'none';
           return;
         }
 
@@ -1609,10 +1627,11 @@ function doNominatePlayer(p){
 			setStatus('Login gestore ✅', true);
 
 			// mostra host, nascondi tutto il resto
-			document.getElementById('loginCard')?.style?.setProperty('display', 'none');
-			document.getElementById('bidderCard')?.style?.setProperty('display', 'none');
-			document.getElementById('monitorCard')?.style?.setProperty('display', 'none');
-			document.getElementById('hostCard')?.style?.setProperty('display', 'block');
+                        document.getElementById('loginCard')?.style?.setProperty('display', 'none');
+                        document.getElementById('bidderCard')?.style?.setProperty('display', 'none');
+                        document.getElementById('monitorCard')?.style?.setProperty('display', 'none');
+                        document.getElementById('hostCard')?.style?.setProperty('display', 'block');
+                        document.getElementById('rosterCard')?.style?.setProperty('display', 'block');
 
                         // chiedi subito la lista utenti
                         try {
@@ -2317,21 +2336,23 @@ function doNominatePlayer(p){
                   if (player.fascia) td.classList.add('fascia-' + player.fascia);
                   const imgSrc = player.img ? `/img-proxy?u=${encodeURIComponent(player.img)}` : '/placeholder.jpg';
                   td.innerHTML = `<img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:cover;"> <span>${escapeHtml(player.name||'')}</span> <span class="mono">${player.price ?? 0}</span>`;
-                  const btnRem = document.createElement('button');
-                  btnRem.textContent = 'Remove';
-                  btnRem.className = 'btn btn-danger btn-sm';
-                  btnRem.onclick = () => ensureWS(()=>ws.send(JSON.stringify({ type:'host:remove-player', participantId: b.id, playerId: player.id })));
-                  const btnRe = document.createElement('button');
-                  btnRe.textContent = 'Reassign';
-                  btnRe.className = 'btn btn-ghost btn-sm';
-                  btnRe.onclick = () => {
-                    const others = (usersCache||[]).filter(u => u.participantId && u.participantId !== b.id);
-                    const choices = others.map(u => `${u.participantId} - ${u.name}`).join('\n');
-                    const toId = prompt('Assegna a quale partecipante?\n'+choices, others[0]?.participantId || '');
-                    if (toId) ensureWS(()=>ws.send(JSON.stringify({ type:'host:reassign-player', fromId: b.id, toId, playerId: player.id })));
-                  };
-                  td.appendChild(btnRem);
-                  td.appendChild(btnRe);
+                  if (myRole === 'host') {
+                    const btnRem = document.createElement('button');
+                    btnRem.textContent = 'Remove';
+                    btnRem.className = 'btn btn-danger btn-sm';
+                    btnRem.onclick = () => ensureWS(()=>ws.send(JSON.stringify({ type:'host:remove-player', participantId: b.id, playerId: player.id })));
+                    const btnRe = document.createElement('button');
+                    btnRe.textContent = 'Reassign';
+                    btnRe.className = 'btn btn-ghost btn-sm';
+                    btnRe.onclick = () => {
+                      const others = (usersCache||[]).filter(u => u.participantId && u.participantId !== b.id);
+                      const choices = others.map(u => `${u.participantId} - ${u.name}`).join('\n');
+                      const toId = prompt('Assegna a quale partecipante?\n'+choices, others[0]?.participantId || '');
+                      if (toId) ensureWS(()=>ws.send(JSON.stringify({ type:'host:reassign-player', fromId: b.id, toId, playerId: player.id })));
+                    };
+                    td.appendChild(btnRem);
+                    td.appendChild(btnRe);
+                  }
                 }
                 tr.appendChild(td);
               });
@@ -2849,6 +2870,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <input type="checkbox" id="toggleBidderDetails" onchange="onToggleBidderDetails()" />
                                     Dettagli bidder
                                   </label>
+                                  <label style="display:flex; align-items:center; gap:4px;">
+                                    <input type="checkbox" id="toggleBidderRoster" onchange="onToggleBidderRoster()" />
+                                    Mostra roster ai bidder
+                                  </label>
                                   <button class="btn btn-ghost" onclick="ensureWS(()=>ws.send(JSON.stringify({type:'host:get-users'})))">Aggiorna lista</button>
                                   <button class="btn btn-danger" onclick="onEndItem()">Chiudi asta</button>
                                 </div>
@@ -2991,11 +3016,6 @@ document.addEventListener('DOMContentLoaded', () => {
                           </div>
                         </div>
 
-                        <div id="rosterTab" class="section full">
-                          <div class="section-title">Rosters</div>
-                          <div id="rosterList"></div>
-                        </div>
-
                         <div class="section full" id="invitesSection">
                           <div class="section-title">Inviti</div>
 
@@ -3050,7 +3070,14 @@ document.addEventListener('DOMContentLoaded', () => {
 				</div>
 			</div>
 		  </div>
-		</div>
+                </div>
+
+        <div class="card" id="rosterCard" style="display:none;">
+          <div id="rosterTab" class="section full">
+            <div class="section-title">Rosters</div>
+            <div id="rosterList"></div>
+          </div>
+        </div>
 
         <div class="card" id="bidderCard" style="display:none;">
           <h2>Partecipante</h2>
@@ -3253,6 +3280,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.onHostStartRound = onHostStartRound;
         window.onHostStopRound  = onHostStopRound;
         window.onToggleBidderDetails = onToggleBidderDetails;
+        window.onToggleBidderRoster = onToggleBidderRoster;
   </script>
 </head>
 <body></body>
