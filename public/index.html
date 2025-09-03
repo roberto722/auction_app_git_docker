@@ -2279,47 +2279,68 @@ function doNominatePlayer(p){
             return { id: pid, name: u ? (u.name || pid) : pid };
           });
 
+          const roleOrder = ['P','D','C','A'];
+          const byBidder = {};
+
           bidders.forEach(b => {
-            const players = rosterCache[b.id] || [];
-            const gDiv = document.createElement('div');
-            gDiv.className = 'roster-group';
-            const gTitle = document.createElement('h3');
-            gTitle.textContent = b.name;
-            gDiv.appendChild(gTitle);
-
-            const table = document.createElement('table');
-            table.className = 'roster-table';
-            const tbody = document.createElement('tbody');
-
-            players.forEach(pl => {
-              const tr = document.createElement('tr');
-              if (pl.fascia) tr.classList.add('fascia-' + pl.fascia);
-              const td = document.createElement('td');
-              const imgSrc = pl.img ? `/img-proxy?u=${encodeURIComponent(pl.img)}` : '/placeholder.jpg';
-              td.innerHTML = `<img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:cover;"> <span>${escapeHtml(pl.name||'')}</span> <span class="mono">${pl.price ?? 0}</span>`;
-              const btnRem = document.createElement('button');
-              btnRem.textContent = 'Remove';
-              btnRem.className = 'btn btn-danger btn-sm';
-              btnRem.onclick = () => ensureWS(()=>ws.send(JSON.stringify({ type:'host:remove-player', participantId: b.id, playerId: pl.id })));
-              const btnRe = document.createElement('button');
-              btnRe.textContent = 'Reassign';
-              btnRe.className = 'btn btn-ghost btn-sm';
-              btnRe.onclick = () => {
-                const bidders = (usersCache||[]).filter(u => u.participantId && u.participantId !== b.id);
-                const choices = bidders.map(u => `${u.participantId} - ${u.name}`).join('\n');
-                const toId = prompt('Assegna a quale partecipante?\n'+choices, bidders[0]?.participantId || '');
-                if (toId) ensureWS(()=>ws.send(JSON.stringify({ type:'host:reassign-player', fromId: b.id, toId, playerId: pl.id })));
-              };
-              td.appendChild(btnRem);
-              td.appendChild(btnRe);
-              tr.appendChild(td);
-              tbody.appendChild(tr);
-            });
-
-            table.appendChild(tbody);
-            gDiv.appendChild(table);
-            wrap.appendChild(gDiv);
+            const players = (rosterCache[b.id] || []).slice().sort((a, b) =>
+              roleOrder.indexOf(a.fascia) - roleOrder.indexOf(b.fascia)
+            );
+            const grouped = {};
+            roleOrder.forEach(r => { grouped[r] = players.filter(p => p.fascia === r); });
+            byBidder[b.id] = grouped;
           });
+
+          const table = document.createElement('table');
+          table.className = 'roster-table';
+          const thead = document.createElement('thead');
+          const headRow = document.createElement('tr');
+          bidders.forEach(b => {
+            const th = document.createElement('th');
+            th.textContent = b.name;
+            headRow.appendChild(th);
+          });
+          thead.appendChild(headRow);
+          table.appendChild(thead);
+
+          const tbody = document.createElement('tbody');
+
+          roleOrder.forEach(r => {
+            let max = 0;
+            bidders.forEach(b => { max = Math.max(max, byBidder[b.id][r].length); });
+            for (let i = 0; i < max; i++) {
+              const tr = document.createElement('tr');
+              bidders.forEach(b => {
+                const player = byBidder[b.id][r][i];
+                const td = document.createElement('td');
+                if (player) {
+                  if (player.fascia) td.classList.add('fascia-' + player.fascia);
+                  const imgSrc = player.img ? `/img-proxy?u=${encodeURIComponent(player.img)}` : '/placeholder.jpg';
+                  td.innerHTML = `<img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:cover;"> <span>${escapeHtml(player.name||'')}</span> <span class="mono">${player.price ?? 0}</span>`;
+                  const btnRem = document.createElement('button');
+                  btnRem.textContent = 'Remove';
+                  btnRem.className = 'btn btn-danger btn-sm';
+                  btnRem.onclick = () => ensureWS(()=>ws.send(JSON.stringify({ type:'host:remove-player', participantId: b.id, playerId: player.id })));
+                  const btnRe = document.createElement('button');
+                  btnRe.textContent = 'Reassign';
+                  btnRe.className = 'btn btn-ghost btn-sm';
+                  btnRe.onclick = () => {
+                    const others = (usersCache||[]).filter(u => u.participantId && u.participantId !== b.id);
+                    const choices = others.map(u => `${u.participantId} - ${u.name}`).join('\n');
+                    const toId = prompt('Assegna a quale partecipante?\n'+choices, others[0]?.participantId || '');
+                    if (toId) ensureWS(()=>ws.send(JSON.stringify({ type:'host:reassign-player', fromId: b.id, toId, playerId: player.id })));
+                  };
+                  td.appendChild(btnRem);
+                  td.appendChild(btnRe);
+                }
+                tr.appendChild(td);
+              });
+              tbody.appendChild(tr);
+            }
+          });
+
+          table.appendChild(tbody);
+          wrap.appendChild(table);
         }
 
     // === Giocatori (CSV) ===
