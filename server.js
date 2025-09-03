@@ -25,6 +25,8 @@ const MAX_IMG_SIZE = 5 * 1024 * 1024; // 5 MB
 
 // Mapping dei ruoli da lettera a nome esteso
 const ROLE_MAP = { A: 'Attaccante', D: 'Difensore', C: 'Centrocampista', P: 'Portiere' };
+// Mappa per gli slot disponibili per ruolo
+const FASCIA_TO_ROLE = { P:'por', D:'dif', C:'cen', A:'att' };
 
 app.get('/img-proxy', async (req, res) => {
   const u = req.query.u;
@@ -1094,7 +1096,21 @@ wss.on('connection', (ws) => {
         }
 
         if (msg.type === 'host:remove-player' && clients.get(clientId).isHost) {
-          removePlayer(String(msg.participantId), String(msg.playerId));
+          const pid = String(msg.participantId);
+          const removed = removePlayer(pid, String(msg.playerId));
+          if (removed) {
+            const roleKey = FASCIA_TO_ROLE[removed.fascia];
+            const c = getClientByParticipantId(pid);
+            if (c) {
+              ensureBudgetFields(c);
+              c.credits = (c.credits || 0) + (removed.price || 0);
+              if (roleKey) {
+                c.slotsByRole[roleKey] = (c.slotsByRole[roleKey] || 0) + 1;
+              }
+              pushLog({ type:'bidder-update', time: now(), target: c.name, credits: c.credits, slotsByRole: c.slotsByRole });
+            }
+            broadcastUsers();
+          }
           broadcastRoster();
           return;
         }
@@ -1102,7 +1118,29 @@ wss.on('connection', (ws) => {
         if (msg.type === 'host:reassign-player' && clients.get(clientId).isHost) {
           const from = String(msg.fromPid ?? msg.fromId ?? '');
           const to = String(msg.toPid ?? msg.toId ?? '');
-          movePlayer(from, to, String(msg.playerId));
+          const moved = movePlayer(from, to, String(msg.playerId));
+          if (moved) {
+            const roleKey = FASCIA_TO_ROLE[moved.fascia];
+            const oldClient = getClientByParticipantId(from);
+            if (oldClient) {
+              ensureBudgetFields(oldClient);
+              oldClient.credits = (oldClient.credits || 0) + (moved.price || 0);
+              if (roleKey) {
+                oldClient.slotsByRole[roleKey] = (oldClient.slotsByRole[roleKey] || 0) + 1;
+              }
+              pushLog({ type:'bidder-update', time: now(), target: oldClient.name, credits: oldClient.credits, slotsByRole: oldClient.slotsByRole });
+            }
+            const newClient = getClientByParticipantId(to);
+            if (newClient) {
+              ensureBudgetFields(newClient);
+              newClient.credits = Math.max(0, (newClient.credits || 0) - (moved.price || 0));
+              if (roleKey) {
+                newClient.slotsByRole[roleKey] = Math.max(0, (newClient.slotsByRole[roleKey] || 0) - 1);
+              }
+              pushLog({ type:'bidder-update', time: now(), target: newClient.name, credits: newClient.credits, slotsByRole: newClient.slotsByRole });
+            }
+            broadcastUsers();
+          }
           broadcastRoster();
           return;
         }
