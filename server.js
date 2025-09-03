@@ -459,7 +459,7 @@ function broadcastRoster() {
   }
   const s = JSON.stringify({ type: 'roster-update', roster });
   for (const [, c] of clients) {
-    if ((c.role === 'host' || c.role === 'monitor') && c.ws.readyState === WebSocket.OPEN) {
+    if ((c.isHost || c.role === 'monitor') && c.ws.readyState === WebSocket.OPEN) {
       c.ws.send(s);
     }
   }
