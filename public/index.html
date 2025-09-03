@@ -2822,17 +2822,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <!-- HOST CARD -->
         <div class="card" id="hostCard" style="display:none;">
 		  <!-- Toolbar / stat -->
-		  <div class="host-toolbar">
-                        <div class="stat-group">
-                          <div class="stat">
-                                <div class="stat-label">In corso</div>
-                                <div class="stat-value">
-                                  <span id="itemNameHost">—</span>
-                                </div>
-                          </div>
-                        </div>
-
-                        <div id="roundInfo" class="stat" style="margin-left:8px;">
+                    <div class="host-toolbar">
+                          <div id="roundInfo" class="stat" style="margin-left:8px;">
                           <div class="stat-label">Round Robin</div>
 			  <div class="stat-value">disattivato</div>
 			</div>
@@ -2972,8 +2963,9 @@ document.addEventListener('DOMContentLoaded', () => {
 			<div class="host-col">
 			  <!-- Asta corrente (dettaglio) -->
 			  <div class="section">
-				<div class="section-title">Asta corrente</div>
+                                <div class="section-title">Asta corrente</div>
                                 <div class="pill-row">
+                                  <span class="pill-host"><b>Giocatore</b> <span id="itemNameHost">—</span></span>
                                   <span class="pill-host"><b>Ruolo</b> <span id="itemRoleHost">—</span></span>
                                   <span class="pill-host"><b>Squadra</b> <span id="itemTeamHost">—</span></span>
                                   <span class="pill-host"><b>Countdown</b> <span id="countdownHost">—</span></span>
