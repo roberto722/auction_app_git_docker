@@ -2649,23 +2649,6 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
   <div><span id="itemNameBidMobile">—</span></div>
   <div>Prezzo: <b id="itemPriceBidMobile">0</b> — da <b id="itemBidderBidMobile">—</b></div>
   <div>Countdown: <b id="countdownBidMobile">—</b></div>
-  <div class="quick-bid" role="toolbar" aria-label="Offerte rapide">
-    <button class="qbtn q1"  onclick="onBidPlus(1)"  aria-label="Aggiungi 1">
-      <span class="chip" aria-hidden="true">
-<i class="fa-solid fa-plus"></i>
-      </span><span class="label">+1</span>
-    </button>
-    <button class="qbtn q5" onclick="onBidPlus(5)" aria-label="Aggiungi 5">
-      <span class="chip" aria-hidden="true">
-<i class="fa-solid fa-plus"></i>
-      </span><span class="label">+5</span>
-    </button>
-    <button class="qbtn q10" onclick="onBidPlus(10)" aria-label="Aggiungi 10">
-      <span class="chip" aria-hidden="true">
-<i class="fa-solid fa-bolt"></i>
-      </span><span class="label">+10</span>
-    </button>
-  </div>
   <div id="bidBottomBar" class="bid-bottom-bar">
     <input id="bidAmountMobile" type="text" inputmode="numeric" />
     <button class="btn" aria-label="Aumenta" onclick="onBidMobilePlus()">+</button>
