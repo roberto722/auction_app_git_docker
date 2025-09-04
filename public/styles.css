@@ -16,6 +16,17 @@
     body { font-family: var(--font-base); margin: var(--spacing-xl); }
     .grid { display:grid; gap:var(--spacing-lg); grid-template-columns: 1fr; }
     .card { border:1px solid var(--color-border); border-radius:var(--spacing-md); padding:var(--spacing-lg); }
+
+#rosterCard {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 600px) {
+  #rosterCard {
+    max-height: 50vh;
+  }
+}
     .row { display:grid; grid-template-columns: 1fr auto; gap:var(--spacing-sm); margin:var(--spacing-sm) 0; }
     input, button { padding:var(--spacing-sm); font-size:var(--font-size-base); }
     #status { padding:var(--spacing-sm); border-radius:var(--spacing-sm); background:var(--color-bg); min-height:2.2em; }

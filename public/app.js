@@ -1054,7 +1054,7 @@ if (d.type === 'joined') {
   }
   document.getElementById('meName') && (document.getElementById('meName').textContent = d.name || '');
   const rosterCard = document.getElementById('rosterCard');
-  if (rosterCard) rosterCard.style.display = (myRole === 'host' || (myRole === 'bidder' && showBidderRoster)) ? 'block' : 'none';
+  if (rosterCard) rosterCard.style.display = (myRole === 'host' || showBidderRoster) ? 'block' : 'none';
   return;
 }
 
@@ -1071,7 +1071,7 @@ if (d.type === 'show-roster-bidders') {
   const cb = document.getElementById('toggleBidderRoster');
   if (cb) cb.checked = showBidderRoster;
   const card = document.getElementById('rosterCard');
-  if (card) card.style.display = (myRole === 'host' || (myRole === 'bidder' && showBidderRoster)) ? 'block' : 'none';
+  if (card) card.style.display = (myRole === 'host' || showBidderRoster) ? 'block' : 'none';
   return;
 }
 
@@ -2644,7 +2644,7 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 		  </div>
 </div>
 
-<div class="card" id="rosterCard" style="display:none;">
+<div class="card" id="rosterCard">
   <div id="rosterTab" class="section full">
     <div class="section-title">Rosters</div>
     <div id="rosterList"></div>
@@ -2918,4 +2918,5 @@ if (dx > 50) closePanel();
 
       renderProfile();
       renderHistory();
+      renderRosters(rosterCache);
     });
