@@ -2686,17 +2686,15 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 		  </div>
 </div>
 
-<div class="card" id="rosterCard">
-  <div id="rosterTab" class="section full">
-    <div class="section-title">Rosters
-      <select id="rosterViewMode" class="roster-view-select">
-        <option value="auto">Auto</option>
-        <option value="table">Tabella</option>
-        <option value="cards">Card</option>
-      </select>
-    </div>
-    <div id="rosterList"></div>
+<div id="rosterCard" class="roster-container">
+  <div class="roster-header">Rosters
+    <select id="rosterViewMode" class="roster-view-select">
+      <option value="auto">Auto</option>
+      <option value="table">Tabella</option>
+      <option value="cards">Card</option>
+    </select>
   </div>
+  <div id="rosterList"></div>
 </div>
 
 <div id="mobileAuctionOverlay">
