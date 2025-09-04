@@ -107,25 +107,19 @@ let calledPlayers = new Set();
 	  }
 	})();
 
-	function showLogoutBar(show=true){
-	  const bar = document.querySelector('.logout-bar');
-	  if (bar) bar.style.display = show ? 'flex' : 'none';
-	}
-
-	function doLogout(){
-	  // pulizia dati locali
-	  try { localStorage.removeItem('inviteToken'); } catch {}
-	  try { localStorage.removeItem('clientId'); } catch {}
-	  try { localStorage.removeItem('hostPin'); } catch {}
+        function doLogout(){
+          // pulizia dati locali
+          try { localStorage.removeItem('inviteToken'); } catch {}
+          try { localStorage.removeItem('clientId'); } catch {}
+          try { localStorage.removeItem('hostPin'); } catch {}
 
 	  // chiudi eventuale WS
   try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, 'logout'); } catch {}
   ws = null; isHost = false; myRole = null; myId = null; myParticipantId = null;
 
-	  // torna alla schermata iniziale
-	  showLogoutBar(false);
-	  location.href = '/';
-	}
+          // torna alla schermata iniziale
+          location.href = '/';
+        }
 
 	
     function $(id){ return document.getElementById(id); }
@@ -250,27 +244,6 @@ let calledPlayers = new Set();
 	  });
 	}
 
-	function setConnectionBanner(connected){
-	  const bar = document.querySelector('.logout-bar');
-	  if (!bar) return;
-	  bar.style.display = 'flex';
-	  bar.style.background = connected ? 'rgba(17,17,17,0.9)' : '#7c2d12'; // marrone/rosso quando offline
-	  bar.querySelector('span').textContent = connected ? 'Sei connesso.' : 'Disconnesso. Ritento a breve…';
-	  // bottone "Riconnetti" on demand
-	  let btn = bar.querySelector('#reconnectBtn');
-	  if (!connected) {
-		if (!btn) {
-		  btn = document.createElement('button');
-		  btn.id = 'reconnectBtn';
-		  btn.className = 'btn';
-		  btn.textContent = 'Riconnetti ora';
-		  btn.onclick = ()=> { cancelReconnect(); ensureWS(autoRejoin); };
-		  bar.appendChild(btn);
-		}
-	  } else {
-		if (btn) btn.remove();
-	  }
-	}
 
 	function autoRejoin(){
 	  // 1) preferisci il token invito se presente
@@ -315,10 +288,9 @@ if (last?.name && last?.role) {
 
 	function markDisconnectedUI(){
 	  isConnected = false;
-	  setStatus('Disconnesso. Riconnessione…', false, true);
-	  setConnectionBanner(false);
-	  setBidButtonsEnabled(false);
-	}
+          setStatus('Disconnesso. Riconnessione…', false, true);
+          setBidButtonsEnabled(false);
+        }
 
 
 
@@ -862,11 +834,6 @@ roleSel.addEventListener('change', roleChange);
 roleChange({ target: roleSel });
   }
   if (btn) btn.addEventListener('click', doLogin);
-  document.addEventListener('click', (e) => {
-if (e.target && e.target.id === 'logoutBtn') {
-  doLogout();
-}
-  });
 });
 		
 		document.addEventListener('click', (e) => {
@@ -1017,10 +984,9 @@ if (!name) { alert('Inserisci il nome'); return; }
       ws.addEventListener('open', ()=>{
 		isConnected = true;
 		cancelReconnect();
-		setStatus('Connesso.');
-		setConnectionBanner(true);
-		// ping keep-alive parte/ri-parte
-		startClientPing();
+                setStatus('Connesso.');
+                // ping keep-alive parte/ri-parte
+                startClientPing();
 		// auto-rejoin (token invito o ultimo login)
 		(thenSend || autoRejoin)();
 	  }, { once:true });
@@ -1045,10 +1011,9 @@ if (d.type === 'joined') {
 		  document.getElementById('loginCard')?.style?.setProperty('display', 'none');
 		  if (myRole === 'bidder') {
 			document.getElementById('bidderCard').style.display = 'block';
-			const row = document.getElementById('bidderMetaRow'); if (row) row.style.display = 'none';
-			const rowCountdown = document.getElementById('bidderCountdownRow'); if (rowCountdown) rowCountdown.style.display = 'none';
-			showLogoutBar(true);
-		  }
+                        const row = document.getElementById('bidderMetaRow'); if (row) row.style.display = 'none';
+                        const rowCountdown = document.getElementById('bidderCountdownRow'); if (rowCountdown) rowCountdown.style.display = 'none';
+                  }
   if (myRole === 'monitor') {
           showMonitorCard();
   }
@@ -1140,10 +1105,9 @@ if (d.type === 'state' || d.type === 'auction-started' || d.type === 'new-bid') 
 
 // HOST autenticato
 if (d.type === 'host-auth') {
-		  if (d.success) {
-showLogoutBar(true);
-			myRole = 'host'; isHost = true;
-			if (d.clientId) myId = d.clientId;
+                  if (d.success) {
+                        myRole = 'host'; isHost = true;
+                        if (d.clientId) myId = d.clientId;
 
 			// fine attesa host
 			pendingHostLogin = false;
@@ -1383,6 +1347,12 @@ function getMyUser(){
           `;
           box.appendChild(prof);
           box.appendChild(slots);
+
+          const logoutBtn = document.createElement('button');
+          logoutBtn.textContent = 'Logout';
+          logoutBtn.className = 'btn btn-danger profile-logout-btn';
+          logoutBtn.addEventListener('click', doLogout);
+          box.appendChild(logoutBtn);
         }
 
         function renderHistory(){
@@ -2826,16 +2796,8 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 </div>
       `;
       document.body.appendChild(root);
-	  // --- Barra Logout globale (visibile per qualsiasi ruolo “dentro”)
-		const logoutBar = document.createElement('div');
-		logoutBar.className = 'logout-bar';
-		logoutBar.innerHTML = `
-		  <span>Sei connesso.</span>
-		  <button class="btn btn-danger" id="logoutBtn">Logout</button>
-		`;
-		document.body.appendChild(logoutBar);
-	  // Stato iniziale bidder: bottoni disabilitati e righe nascoste
-	  setBidButtonsEnabled(false);
+          // Stato iniziale bidder: bottoni disabilitati e righe nascoste
+          setBidButtonsEnabled(false);
   const metaRowInit = document.getElementById('bidderMetaRow');
   const cntRowInit  = document.getElementById('bidderCountdownRow');
   const roleRowInit = document.getElementById('bidderRoleRow');

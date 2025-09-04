@@ -282,24 +282,7 @@
           display:inline-block; margin-left:var(--spacing-sm); padding:2px 6px; font-size:12px;
           border-radius:999px; background:#eee; border:1px solid var(--color-border);
 	}
-
-	/* Barra logout fissa in basso */
-	.logout-bar {
-	  position: fixed;
-	  left: 0; right: 0; bottom: 0;
-          display: none;                /* nascosta finché non si è dentro */
-          gap: var(--spacing-md);
-          align-items: center;
-          justify-content: center;
-          padding: var(--spacing-sm) var(--spacing-md);
-	  background: rgba(17,17,17,0.9);
-	  color: #fff;
-	  z-index: 9998;
-	}
-	.logout-bar .btn { background:#fff; color:#111; border-color:#fff; }
-	.logout-bar .btn-danger { background:var(--color-danger); border-color:var(--color-danger); color:#fff; }
-	
-	.badge-linked{
+        .badge-linked{
 	  display:inline-block;
 	  margin-left:8px;
 	  padding:2px 6px;
@@ -555,5 +538,18 @@
           border: none;
           font-size: 24px;
           padding: 8px;
+        }
+
+        /* Profile section */
+        #infoProfileContent .profile-logout-btn {
+          display: block;
+          width: 100%;
+          margin-top: var(--spacing-lg);
+        }
+
+        @media (max-width: 600px) {
+          #infoProfileContent .profile-logout-btn {
+            width: 100%;
+          }
         }
 
