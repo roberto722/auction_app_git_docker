@@ -244,8 +244,30 @@ let calledPlayers = new Set();
 	  });
 	}
 
+        function setConnectionBanner(connected){
+          const bar = document.getElementById('connectionBanner');
+          if (!bar) return;
+          bar.style.display = connected ? 'none' : 'flex';
+          bar.style.background = connected ? 'rgba(17,17,17,0.9)' : '#7c2d12';
+          let span = bar.querySelector('span');
+          if (!span) { span = document.createElement('span'); bar.prepend(span); }
+          span.textContent = connected ? 'Sei connesso.' : 'Disconnesso. Ritento a breve…';
+          let btn = bar.querySelector('#reconnectBtn');
+          if (!connected) {
+                if (!btn) {
+                  btn = document.createElement('button');
+                  btn.id = 'reconnectBtn';
+                  btn.className = 'btn';
+                  btn.textContent = 'Riconnetti ora';
+                  btn.onclick = ()=> { cancelReconnect(); ensureWS(autoRejoin); };
+                  bar.appendChild(btn);
+                }
+          } else {
+                if (btn) btn.remove();
+          }
+        }
 
-	function autoRejoin(){
+        function autoRejoin(){
 	  // 1) preferisci il token invito se presente
 	  const token = localStorage.getItem('inviteToken');
 	  if (token) {
@@ -281,14 +303,16 @@ if (last?.name && last?.role) {
 	  }, reconnectBackoff);
 	}
 
-	function cancelReconnect(){
-	  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-	  reconnectBackoff = 2000;
-	}
+        function cancelReconnect(){
+          if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+          reconnectBackoff = 2000;
+          setConnectionBanner(true);
+        }
 
-	function markDisconnectedUI(){
-	  isConnected = false;
+        function markDisconnectedUI(){
+          isConnected = false;
           setStatus('Disconnesso. Riconnessione…', false, true);
+          setConnectionBanner(false);
           setBidButtonsEnabled(false);
         }
 
