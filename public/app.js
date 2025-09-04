@@ -2637,17 +2637,19 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 </div>
 
 <div id="mobileAuctionOverlay">
-  <div class="mobile-overlay-left">
-    <div><span id="itemNameBidMobile">—</span></div>
-    <div>Prezzo: <b id="itemPriceBidMobile">0</b> — da <b id="itemBidderBidMobile">—</b></div>
-    <div>Countdown: <b id="countdownBidMobile">—</b></div>
-    <div id="bidBottomBar" class="bid-bottom-bar">
-      <input id="bidAmountMobile" type="text" inputmode="numeric" />
-      <button class="btn" aria-label="Aumenta" onclick="onBidMobilePlus()">+</button>
+  <div class="mobile-overlay-top">
+    <div class="mobile-overlay-left">
+      <div><span id="itemNameBidMobile">—</span></div>
+      <div>Prezzo: <b id="itemPriceBidMobile">0</b> — da <b id="itemBidderBidMobile">—</b></div>
+      <div>Countdown: <b id="countdownBidMobile">—</b></div>
+    </div>
+    <div class="mobile-overlay-right">
+      <img id="itemImgBidMobile" class="player-img" src="/placeholder.jpg" alt="Immagine giocatore">
     </div>
   </div>
-  <div class="mobile-overlay-right">
-    <img id="itemImgBidMobile" class="player-img" src="/placeholder.jpg" alt="Immagine giocatore">
+  <div id="bidBottomBar" class="bid-bottom-bar">
+    <input id="bidAmountMobile" type="text" inputmode="numeric" />
+    <button class="btn" aria-label="Aumenta" onclick="onBidMobilePlus()">+</button>
   </div>
 </div>
 
