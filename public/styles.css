@@ -19,6 +19,7 @@
     .roster-container { padding:0; border:none; }
 
 #rosterCard {
+  display: none;
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
