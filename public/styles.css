@@ -557,6 +557,8 @@
           font-size: 24px;
           padding: 8px;
         }
+        #infoOverlay .username { display:none; margin-left:8px; font-size:16px; }
+        @media (min-width:601px) { #infoOverlay .username { display:inline; } }
 
         /* Profile section */
         #infoProfileContent .profile-logout-btn {

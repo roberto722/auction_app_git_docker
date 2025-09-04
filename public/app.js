@@ -1042,6 +1042,8 @@ if (d.type === 'joined') {
           showMonitorCard();
   }
   document.getElementById('meName') && (document.getElementById('meName').textContent = d.name || '');
+  const userSpan = document.getElementById('bottomUserName');
+  if (userSpan) userSpan.textContent = d.name || '';
   const rosterCard = document.getElementById('rosterCard');
   if (rosterCard) rosterCard.style.display = (myRole === 'host' || showBidderRoster) ? 'block' : 'none';
   return;
