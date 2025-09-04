@@ -16,6 +16,7 @@
     body { font-family: var(--font-base); margin: var(--spacing-xl); }
     .grid { display:grid; gap:var(--spacing-lg); grid-template-columns: 1fr; }
     .card { border:1px solid var(--color-border); border-radius:var(--spacing-md); padding:var(--spacing-lg); }
+    .roster-container { padding:0; border:none; }
 
 #rosterCard {
   max-height: 70vh;
@@ -26,6 +27,13 @@
 @media (max-width: 600px) {
   #rosterCard {
     max-height: 50vh;
+    margin:0;
+    padding:0;
+  }
+  #rosterCard .roster-header,
+  #rosterCard #rosterList {
+    margin:0;
+    padding:0;
   }
 }
     .row { display:grid; grid-template-columns: 1fr auto; gap:var(--spacing-sm); margin:var(--spacing-sm) 0; }
@@ -34,7 +42,7 @@
     .ok { color:#0a7a0a; } .err { color:#b00020; }
       table { border-collapse:collapse; }
       th, td { border:1px solid var(--color-border); padding:6px; text-align:center; }
-      table.roster-table {}
+      table.roster-table { width:100%; table-layout:fixed; }
       table.roster-table th {
         max-width: 200px;
         white-space: nowrap;
