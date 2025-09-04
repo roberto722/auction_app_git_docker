@@ -2909,6 +2909,23 @@ window.onToggleBidderRoster = onToggleBidderRoster;
       const sections = panel.querySelectorAll('.panel-section');
       let active = null;
 
+      function updateOverlayPadding() {
+        const isHidden = !overlay || window.getComputedStyle(overlay).display === 'none';
+        if (isHidden) {
+          document.body.classList.remove('info-overlay-active');
+          document.body.style.removeProperty('--info-overlay-height');
+          return;
+        }
+        const height = overlay.offsetHeight;
+        document.body.style.setProperty('--info-overlay-height', `${height}px`);
+        document.body.classList.add('info-overlay-active');
+      }
+
+      updateOverlayPadding();
+      window.addEventListener('resize', updateOverlayPadding);
+      const overlayObserver = new MutationObserver(updateOverlayPadding);
+      if (overlay) overlayObserver.observe(overlay, { attributes: true, attributeFilter: ['style', 'class'] });
+
       function openPanel(id) {
 sections.forEach(sec => {
   const match = sec.id === id;
