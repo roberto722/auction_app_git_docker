@@ -2649,7 +2649,7 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
   </div>
   <div id="bidBottomBar" class="bid-bottom-bar">
     <input id="bidAmountMobile" type="text" inputmode="numeric" />
-    <button class="btn" aria-label="Aumenta" onclick="onBidMobilePlus()">+</button>
+    <button class="btn btn-bidMobile" aria-label="Aumenta" onclick="onBidMobilePlus()">+</button>
   </div>
 </div>
 
