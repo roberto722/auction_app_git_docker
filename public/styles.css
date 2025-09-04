@@ -283,16 +283,33 @@
           border-radius:999px; background:#eee; border:1px solid var(--color-border);
 	}
         .badge-linked{
-	  display:inline-block;
-	  margin-left:8px;
-	  padding:2px 6px;
-	  font-size:12px;
-	  border-radius:999px;
-	  background:#ecfdf5;
-	  border:1px solid var(--color-success);
-	  color:#065f46;
-	  vertical-align:baseline;
-	}
+          display:inline-block;
+          margin-left:8px;
+          padding:2px 6px;
+          font-size:12px;
+          border-radius:999px;
+          background:#ecfdf5;
+          border:1px solid var(--color-success);
+          color:#065f46;
+          vertical-align:baseline;
+        }
+
+        .connection-banner {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          display: none;
+          gap: var(--spacing-md);
+          align-items: center;
+          justify-content: center;
+          padding: var(--spacing-sm) var(--spacing-md);
+          background: rgba(17,17,17,0.9);
+          color: #fff;
+          z-index: 10002;
+        }
+        .connection-banner .btn { background:#fff; color:#111; border-color:#fff; }
+        .connection-banner .btn-danger { background:var(--color-danger); border-color:var(--color-danger); color:#fff; }
 
 	/* === Monitor v2 (stadium theme) === */
 	:root{
