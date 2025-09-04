@@ -1610,7 +1610,23 @@ if (name != null) { setText('itemNameBidMobile', name); }
 	  }
 
           // === BIDDER ===
-  if (name != null) { setText('itemNameBidMobile', name); }
+  if (name != null) {
+    setText('itemNameBidMobile', name);
+    const imgEl = document.getElementById('itemImgBidMobile');
+    if (imgEl) {
+      const raw = (d.item?.image ?? '').toString().trim();
+      let src = '/placeholder.jpg';
+      if (raw) {
+        if (raw.startsWith('/')) {
+          src = raw;
+        } else if (/^https?:\/\//i.test(raw)) {
+          src = `/img-proxy?u=${encodeURIComponent(raw)}`;
+        }
+      }
+      imgEl.src = src;
+      imgEl.onerror = () => { imgEl.onerror = null; imgEl.src = '/placeholder.jpg'; };
+    }
+  }
     if (typeof d.seconds === 'number' && d.type !== 'new-bid') startCountdown(d.seconds);
   const metaRow = document.getElementById('bidderMetaRow');
   const cntRow  = document.getElementById('bidderCountdownRow');
@@ -2621,12 +2637,17 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 </div>
 
 <div id="mobileAuctionOverlay">
-  <div><span id="itemNameBidMobile">—</span></div>
-  <div>Prezzo: <b id="itemPriceBidMobile">0</b> — da <b id="itemBidderBidMobile">—</b></div>
-  <div>Countdown: <b id="countdownBidMobile">—</b></div>
-  <div id="bidBottomBar" class="bid-bottom-bar">
-    <input id="bidAmountMobile" type="text" inputmode="numeric" />
-    <button class="btn" aria-label="Aumenta" onclick="onBidMobilePlus()">+</button>
+  <div class="mobile-overlay-left">
+    <div><span id="itemNameBidMobile">—</span></div>
+    <div>Prezzo: <b id="itemPriceBidMobile">0</b> — da <b id="itemBidderBidMobile">—</b></div>
+    <div>Countdown: <b id="countdownBidMobile">—</b></div>
+    <div id="bidBottomBar" class="bid-bottom-bar">
+      <input id="bidAmountMobile" type="text" inputmode="numeric" />
+      <button class="btn" aria-label="Aumenta" onclick="onBidMobilePlus()">+</button>
+    </div>
+  </div>
+  <div class="mobile-overlay-right">
+    <img id="itemImgBidMobile" class="player-img" src="/placeholder.jpg" alt="Immagine giocatore">
   </div>
 </div>
 
