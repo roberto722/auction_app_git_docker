@@ -46,11 +46,19 @@
         max-width: 200px;
         align-items: center;
         justify-content: space-around;
-		gap: 7px;
-		overflow: overlay;
+                gap: 7px;
+                overflow: overlay;
       }
       .big { font-size: 28px; font-weight: 700; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+      .roster-view-select { margin-left: var(--spacing-sm); }
+      .roster-card { border:1px solid var(--color-border); border-radius:var(--spacing-sm); padding:var(--spacing-sm); margin-bottom:var(--spacing-sm); }
+      .roster-card summary { font-weight:700; cursor:pointer; }
+      .roster-role-title { font-weight:600; margin-top:var(--spacing-sm); }
+      .roster-role-list { list-style:none; padding:0; margin:var(--spacing-xs) 0 var(--spacing-sm); }
+      .roster-role-list li { display:flex; align-items:center; gap:var(--spacing-sm); justify-content:space-between; padding:var(--spacing-xs) 0; }
+      .roster-card img { width:32px; height:32px; object-fit:contain; }
 
     /* Fullscreen base */
     html, body { height: 100%; }
