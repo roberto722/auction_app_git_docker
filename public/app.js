@@ -1569,18 +1569,6 @@ if (d.item) {
         imgEl.src = src;
         imgEl.onerror = () => { imgEl.onerror = null; imgEl.src = '/placeholder.jpg'; };
   }
-   // Aggiorna anche pannello bidder
-  const bidImg = document.getElementById('itemImgBid');
-  if (bidImg) {
-        const raw = (d.item?.image ?? '').toString().trim();
-        let src = '/placeholder.jpg';
-        if (raw) {
-          if (raw.startsWith('/')) src = raw;
-          else if (/^https?:\/\//i.test(raw)) src = `/img-proxy?u=${encodeURIComponent(raw)}`;
-        }
-        bidImg.src = src;
-        bidImg.onerror = () => { bidImg.onerror = null; bidImg.src = '/placeholder.jpg'; };
-  }
    // Testi host + monitor
   setText('itemNameHost', d.item.name || '—');
   setText('itemRoleHost', d.item.role || '—');
@@ -1607,8 +1595,8 @@ if (d.item) {
 		setMonPrice(currentPrice);
 		setText('itemBidderHost', currentBidder || '—');
 
-		// Nome visibile anche sul pannello bidder
-if (name != null) { setText('itemNameBid', name); setText('itemNameBidMobile', name); }
+                // Nome visibile anche sul pannello bidder
+if (name != null) { setText('itemNameBidMobile', name); }
 
 		if (Array.isArray(d.last3)) {
 		  renderLast3(d.last3);
@@ -1621,23 +1609,8 @@ if (name != null) { setText('itemNameBid', name); setText('itemNameBidMobile', n
 		return;
 	  }
 
-	  // === BIDDER ===
-  if (name != null) { setText('itemNameBid', name); setText('itemNameBidMobile', name); }
-  const imgBid = document.getElementById('itemImgBid');
-  if (imgBid) {
-    if (d.item && 'image' in d.item) {
-      const raw = (d.item.image || '').toString().trim();
-      let src = '/placeholder.jpg';
-      if (raw) {
-if (raw.startsWith('/')) src = raw;
-else if (/^https?:\/\//i.test(raw)) src = `/img-proxy?u=${encodeURIComponent(raw)}`;
-      }
-      imgBid.src = src;
-      imgBid.onerror = () => { imgBid.onerror = null; imgBid.src = '/placeholder.jpg'; };
-    } else if (d.type === 'auction-ended' || (d.type === 'state' && !d.item)) {
-      imgBid.src = '/placeholder.jpg';
-    }
-  }
+          // === BIDDER ===
+  if (name != null) { setText('itemNameBidMobile', name); }
     if (typeof d.seconds === 'number' && d.type !== 'new-bid') startCountdown(d.seconds);
   const metaRow = document.getElementById('bidderMetaRow');
   const cntRow  = document.getElementById('bidderCountdownRow');
@@ -2657,16 +2630,8 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
   </div>
 </div>
 
-<div class="card" id="bidderCard" style="display:none;">
+  <div class="card" id="bidderCard" style="display:none;">
   <h2>Partecipante</h2>
-  <div>Ciao, <b id="meName">—</b></div>
-  <div class="player-display">
-    <img id="itemImgBid" class="player-photo" src="/placeholder.jpg" alt="" />
-    <div class="player-info">
-      <span id="itemNameBid">—</span>
-      <div id="bidderMetaRow">Prezzo: <b id="itemPriceBid">0</b> — da <b id="itemBidderBid">—</b></div>
-    </div>
-  </div>
   <div id="bidderSecondaryInfo" class="bidder-secondary">
     <div id="bidderMetaBox" class="info-box">
       <div id="bidderCountdownRow">Countdown: <b id="countdownBid">—</b></div>
