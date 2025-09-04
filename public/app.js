@@ -2686,16 +2686,6 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 		  </div>
 </div>
 
-<div id="rosterCard" class="roster-container">
-  <div class="roster-header">Rosters
-    <select id="rosterViewMode" class="roster-view-select">
-      <option value="auto">Auto</option>
-      <option value="table">Tabella</option>
-      <option value="cards">Card</option>
-    </select>
-  </div>
-  <div id="rosterList"></div>
-</div>
 
 <div id="mobileAuctionOverlay">
   <div class="mobile-overlay-top">
@@ -2723,6 +2713,16 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
       <div id="bidderTeamRow" style="display:none;">Squadra: <b id="itemTeamBid">—</b></div>
       <div id="bidderLast3Row" style="display:none;">Ultimi 3: <b id="itemLast3Bid">—</b></div>
     </div>
+  </div>
+  <div id="rosterCard" class="roster-container">
+    <div class="roster-header">Rosters
+      <select id="rosterViewMode" class="roster-view-select">
+        <option value="auto">Auto</option>
+        <option value="table">Tabella</option>
+        <option value="cards">Card</option>
+      </select>
+    </div>
+    <div id="rosterList"></div>
   </div>
   <div class="row" id="bidInputRow">
     <input id="bidAmount" type="number" min="1" placeholder="Offerta precisa" />
