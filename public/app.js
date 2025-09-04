@@ -2666,11 +2666,6 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
     </div>
   </div>
   <div id="bidderSecondaryInfo" class="bidder-secondary">
-    <div id="bidderBudgetBox" class="info-box">
-      <div><b>Crediti:</b> <span id="meCredits">0</span></div>
-      <div><b>Max puntata:</b> <span id="meMaxBid">0</span></div>
-      <div><b>Spesi:</b> <span id="meSpent">0</span></div>
-    </div>
     <div id="bidderMetaBox" class="info-box">
       <div id="bidderCountdownRow">Countdown: <b id="countdownBid">—</b></div>
       <div id="bidderRoleRow" style="display:none;">Ruolo: <b id="itemRoleBid">—</b></div>
@@ -2689,23 +2684,6 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
   <i class="fa-solid fa-plus"></i>
 </span><span class="label">+1</span>
       </button>
-      <button class="qbtn q5" onclick="onBidPlus(5)" aria-label="Aggiungi 5">
-<span class="chip" aria-hidden="true">
-  <i class="fa-solid fa-plus"></i>
-</span><span class="label">+5</span>
-      </button>
-      <button class="qbtn q10" onclick="onBidPlus(10)" aria-label="Aggiungi 10">
-<span class="chip" aria-hidden="true">
-  <i class="fa-solid fa-bolt"></i>
-</span><span class="label">+10</span>
-      </button>
-    </div>
-    <div id="bidderNominateBox" class="card" style="margin-top:12px; display:none;">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-<div><b>Tocca a:</b> <span id="roundWhoseTurn">—</span></div>
-<button id="openNomBtn" class="btn btn-primary" onclick="openNominateModal()">Scegli dalla lista</button>
-      </div>
-      <small>Puoi nominare solo nel tuo turno e quando non c’è un’asta in corso.</small>
     </div>
   </div>
 </div>
