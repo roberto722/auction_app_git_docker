@@ -2645,7 +2645,7 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
   </div>
 </div>
 
-<div id="mobileAuctionOverlay" style="display:none;">
+<div id="mobileAuctionOverlay">
   <div><span id="itemNameBidMobile">—</span></div>
   <div>Prezzo: <b id="itemPriceBidMobile">0</b> — da <b id="itemBidderBidMobile">—</b></div>
   <div>Countdown: <b id="countdownBidMobile">—</b></div>
