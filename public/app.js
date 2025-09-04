@@ -1046,7 +1046,8 @@ if (d.type === 'joined') {
   const userSpan = document.getElementById('bottomUserName');
   if (userSpan) userSpan.textContent = d.name || '';
   const rosterCard = document.getElementById('rosterCard');
-  if (rosterCard) rosterCard.style.display = (myRole === 'host' || showBidderRoster) ? 'block' : 'none';
+  const canShowRoster = myRole === 'host' || (myRole === 'bidder' && showBidderRoster);
+  if (rosterCard) rosterCard.style.display = canShowRoster ? 'block' : 'none';
   return;
 }
 
@@ -1062,8 +1063,9 @@ if (d.type === 'show-roster-bidders') {
   showBidderRoster = !!d.enabled;
   const cb = document.getElementById('toggleBidderRoster');
   if (cb) cb.checked = showBidderRoster;
-  const card = document.getElementById('rosterCard');
-  if (card) card.style.display = (myRole === 'host' || showBidderRoster) ? 'block' : 'none';
+  const rosterCard = document.getElementById('rosterCard');
+  const canShowRoster = myRole === 'host' || (myRole === 'bidder' && showBidderRoster);
+  if (rosterCard) rosterCard.style.display = canShowRoster ? 'block' : 'none';
   return;
 }
 
