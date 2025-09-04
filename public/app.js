@@ -87,6 +87,7 @@ let playersView  = [];     // giocatori attualmente mostrati (filtrati/ordinati)
     let myParticipantId = null;
     let usersCache = [];
     let rosterCache = {};
+    let rosterViewOverride = null; // 'table' | 'cards' | null (auto)
 let pendingHostLogin = false;
 let pendingJoinName = '';
 let auctionActive = false;  // true quando c’è un’asta in corso (per tutti i ruoli)
@@ -1841,6 +1842,10 @@ if (!u.isHost && u.online) {
   });
 }
 
+function getRosterViewMode(){
+  return rosterViewOverride || (window.innerWidth < 600 ? 'cards' : 'table');
+}
+
 function renderRosters(map){
   rosterCache = map || rosterCache || {};
   const wrap = $('rosterList');
@@ -1867,6 +1872,56 @@ function renderRosters(map){
     roleOrder.forEach(r => { grouped[r] = players.filter(p => p.fascia === r); });
     byBidder[b.id] = grouped;
   });
+  const mode = getRosterViewMode();
+  if (mode === 'cards') {
+    const roleLabels = { P:'Portieri', D:'Difensori', C:'Centrocampisti', A:'Attaccanti' };
+    bidders.forEach(b => {
+      const det = document.createElement('details');
+      det.className = 'roster-card';
+      const sum = document.createElement('summary');
+      sum.textContent = b.name;
+      det.appendChild(sum);
+      roleOrder.forEach(r => {
+        const arr = byBidder[b.id][r];
+        if (!arr.length) return;
+        const roleWrap = document.createElement('div');
+        const title = document.createElement('div');
+        title.className = 'roster-role-title';
+        title.textContent = roleLabels[r] || r;
+        roleWrap.appendChild(title);
+        const ul = document.createElement('ul');
+        ul.className = 'roster-role-list';
+        arr.forEach(player => {
+          const li = document.createElement('li');
+          if (player.fascia) li.classList.add('fascia-' + player.fascia);
+          const imgSrc = player.img ? `/img-proxy?u=${encodeURIComponent(player.img)}` : '/placeholder.jpg';
+          li.innerHTML = `<img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:contain;"> <span>${escapeHtml(player.name||'')}</span> <span class="mono">${player.price ?? 0}</span>`;
+          if (myRole === 'host') {
+            const btnRem = document.createElement('button');
+            btnRem.textContent = 'Remove';
+            btnRem.className = 'btn btn-danger btn-sm';
+            btnRem.onclick = () => ensureWS(()=>ws.send(JSON.stringify({ type:'host:remove-player', participantId: b.id, playerId: player.id })));
+            const btnRe = document.createElement('button');
+            btnRe.textContent = 'Reassign';
+            btnRe.className = 'btn btn-ghost btn-sm';
+            btnRe.onclick = () => {
+              const others = (usersCache||[]).filter(u => u.participantId && u.participantId !== b.id);
+              const choices = others.map(u => `${u.participantId} - ${u.name}`).join('\n');
+              const toId = prompt('Assegna a quale partecipante?\n'+choices, others[0]?.participantId || '');
+              if (toId) ensureWS(()=>ws.send(JSON.stringify({ type:'host:reassign-player', fromId: b.id, toId, playerId: player.id })));
+            };
+            li.appendChild(btnRem);
+            li.appendChild(btnRe);
+          }
+          ul.appendChild(li);
+        });
+        roleWrap.appendChild(ul);
+        det.appendChild(roleWrap);
+      });
+      wrap.appendChild(det);
+    });
+    return;
+  }
 
   const table = document.createElement('table');
   table.className = 'roster-table';
@@ -1922,6 +1977,8 @@ tr.appendChild(td);
   table.appendChild(tbody);
   wrap.appendChild(table);
 }
+
+window.addEventListener('resize', () => renderRosters(rosterCache));
 
     // === Giocatori (CSV) ===
     // --- helper locali per normalizzare una riga CSV ---
@@ -2631,7 +2688,13 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 
 <div class="card" id="rosterCard">
   <div id="rosterTab" class="section full">
-    <div class="section-title">Rosters</div>
+    <div class="section-title">Rosters
+      <select id="rosterViewMode" class="roster-view-select">
+        <option value="auto">Auto</option>
+        <option value="table">Tabella</option>
+        <option value="cards">Card</option>
+      </select>
+    </div>
     <div id="rosterList"></div>
   </div>
 </div>
@@ -2771,6 +2834,14 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 </div>
       `;
       document.body.appendChild(root);
+      const rosterSel = $('rosterViewMode');
+      if (rosterSel) {
+        rosterSel.addEventListener('change', () => {
+          const v = rosterSel.value;
+          rosterViewOverride = v === 'auto' ? null : v;
+          renderRosters(rosterCache);
+        });
+      }
           // Stato iniziale bidder: bottoni disabilitati e righe nascoste
           setBidButtonsEnabled(false);
   const metaRowInit = document.getElementById('bidderMetaRow');
