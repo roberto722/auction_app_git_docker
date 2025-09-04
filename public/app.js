@@ -2909,6 +2909,24 @@ window.onToggleBidderRoster = onToggleBidderRoster;
       const sections = panel.querySelectorAll('.panel-section');
       let active = null;
 
+      const mobileOverlay = document.getElementById('mobileAuctionOverlay');
+      function updateMobileOverlayHeight() {
+        const isHidden = !mobileOverlay || window.getComputedStyle(mobileOverlay).display === 'none';
+        if (isHidden) {
+          document.documentElement.style.removeProperty('--overlay-height');
+          return;
+        }
+        const h = mobileOverlay.offsetHeight;
+        document.documentElement.style.setProperty('--overlay-height', `${h}px`);
+      }
+
+      updateMobileOverlayHeight();
+      window.addEventListener('resize', updateMobileOverlayHeight);
+      if (mobileOverlay) {
+        const mobObserver = new MutationObserver(updateMobileOverlayHeight);
+        mobObserver.observe(mobileOverlay, { childList: true, subtree: true, attributes: true });
+      }
+
       function updateOverlayPadding() {
         const isHidden = !overlay || window.getComputedStyle(overlay).display === 'none';
         if (isHidden) {

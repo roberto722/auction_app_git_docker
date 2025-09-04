@@ -116,7 +116,7 @@
       #bidderMetaBox div { margin:2px 0; }
       #bidInputRow { display:none; }
       #mobileAuctionOverlay { display:flex; }
-      #bidderCard { margin-top:180px; }
+      #bidderCard { margin-top: var(--overlay-height, 0px); }
     }
 
     /* Monitor layout */
