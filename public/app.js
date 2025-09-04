@@ -1045,9 +1045,11 @@ if (d.type === 'joined') {
   document.getElementById('meName') && (document.getElementById('meName').textContent = d.name || '');
   const userSpan = document.getElementById('bottomUserName');
   if (userSpan) userSpan.textContent = d.name || '';
-  const rosterCard = document.getElementById('rosterCard');
+  const rosterHost = document.getElementById('rosterCard');
+  const rosterBidder = document.getElementById('rosterCardBidder');
+  if (rosterHost) rosterHost.style.display = myRole === 'host' ? 'block' : 'none';
   const canShowRoster = myRole === 'host' || (myRole === 'bidder' && showBidderRoster);
-  if (rosterCard) rosterCard.style.display = canShowRoster ? 'block' : 'none';
+  if (rosterBidder) rosterBidder.style.display = canShowRoster ? 'block' : 'none';
   return;
 }
 
@@ -1063,9 +1065,11 @@ if (d.type === 'show-roster-bidders') {
   showBidderRoster = !!d.enabled;
   const cb = document.getElementById('toggleBidderRoster');
   if (cb) cb.checked = showBidderRoster;
-  const rosterCard = document.getElementById('rosterCard');
+  const rosterHost = document.getElementById('rosterCard');
+  const rosterBidder = document.getElementById('rosterCardBidder');
+  if (rosterHost) rosterHost.style.display = myRole === 'host' ? 'block' : 'none';
   const canShowRoster = myRole === 'host' || (myRole === 'bidder' && showBidderRoster);
-  if (rosterCard) rosterCard.style.display = canShowRoster ? 'block' : 'none';
+  if (rosterBidder) rosterBidder.style.display = canShowRoster ? 'block' : 'none';
   return;
 }
 
@@ -1850,9 +1854,9 @@ function getRosterViewMode(){
 
 function renderRosters(map){
   rosterCache = map || rosterCache || {};
-  const wrap = $('rosterList');
-  if (!wrap) return;
-  wrap.innerHTML = '';
+  const wraps = ['rosterList', 'rosterListBidder'].map(id => $(id)).filter(Boolean);
+  if (!wraps.length) return;
+  wraps.forEach(w => w.innerHTML = '');
 
   const bidderIds = Array.from(new Set([
     ...Object.keys(rosterCache),
@@ -1875,109 +1879,110 @@ function renderRosters(map){
     byBidder[b.id] = grouped;
   });
   const mode = getRosterViewMode();
-  if (mode === 'cards') {
-    const roleLabels = { P:'Portieri', D:'Difensori', C:'Centrocampisti', A:'Attaccanti' };
-    bidders.forEach(b => {
-      const det = document.createElement('details');
-      det.className = 'roster-card';
-      const sum = document.createElement('summary');
-      sum.textContent = b.name;
-      det.appendChild(sum);
-      roleOrder.forEach(r => {
-        const arr = byBidder[b.id][r];
-        if (!arr.length) return;
-        const roleWrap = document.createElement('div');
-        const title = document.createElement('div');
-        title.className = 'roster-role-title';
-        title.textContent = roleLabels[r] || r;
-        roleWrap.appendChild(title);
-        const ul = document.createElement('ul');
-        ul.className = 'roster-role-list';
-        arr.forEach(player => {
-          const li = document.createElement('li');
-          if (player.fascia) li.classList.add('fascia-' + player.fascia);
-          const imgSrc = player.img ? `/img-proxy?u=${encodeURIComponent(player.img)}` : '/placeholder.jpg';
-          li.innerHTML = `<img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:contain;"> <span>${escapeHtml(player.name||'')}</span> <span class="mono">${player.price ?? 0}</span>`;
-          if (myRole === 'host') {
-            const btnRem = document.createElement('button');
-            btnRem.textContent = 'Remove';
-            btnRem.className = 'btn btn-danger btn-sm';
-            btnRem.onclick = () => ensureWS(()=>ws.send(JSON.stringify({ type:'host:remove-player', participantId: b.id, playerId: player.id })));
-            const btnRe = document.createElement('button');
-            btnRe.textContent = 'Reassign';
-            btnRe.className = 'btn btn-ghost btn-sm';
-            btnRe.onclick = () => {
-              const others = (usersCache||[]).filter(u => u.participantId && u.participantId !== b.id);
-              const choices = others.map(u => `${u.participantId} - ${u.name}`).join('\n');
-              const toId = prompt('Assegna a quale partecipante?\n'+choices, others[0]?.participantId || '');
-              if (toId) ensureWS(()=>ws.send(JSON.stringify({ type:'host:reassign-player', fromId: b.id, toId, playerId: player.id })));
-            };
-            li.appendChild(btnRem);
-            li.appendChild(btnRe);
-          }
-          ul.appendChild(li);
-        });
-        roleWrap.appendChild(ul);
-        det.appendChild(roleWrap);
-      });
-      wrap.appendChild(det);
-    });
-    return;
-  }
-
-  const table = document.createElement('table');
-  table.className = 'roster-table';
-  const thead = document.createElement('thead');
-  const headRow = document.createElement('tr');
-  bidders.forEach(b => {
-    const th = document.createElement('th');
-    th.textContent = b.name;
-    headRow.appendChild(th);
-  });
-  thead.appendChild(headRow);
-  table.appendChild(thead);
-
-  const tbody = document.createElement('tbody');
-
-  roleOrder.forEach(r => {
-    let max = 0;
-    bidders.forEach(b => { max = Math.max(max, byBidder[b.id][r].length); });
-    for (let i = 0; i < max; i++) {
-      const tr = document.createElement('tr');
+  wraps.forEach(wrap => {
+    if (mode === 'cards') {
+      const roleLabels = { P:'Portieri', D:'Difensori', C:'Centrocampisti', A:'Attaccanti' };
       bidders.forEach(b => {
-const player = byBidder[b.id][r][i];
-  const td = document.createElement('td');
-  if (player) {
-    td.classList.add('player-td');
-    if (player.fascia) td.classList.add('fascia-' + player.fascia);
-  const imgSrc = player.img ? `/img-proxy?u=${encodeURIComponent(player.img)}` : '/placeholder.jpg';
-  td.innerHTML = `<img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:contain;"> <span>${escapeHtml(player.name||'')}</span> <span class="mono">${player.price ?? 0}</span>`;
-  if (myRole === 'host') {
-    const btnRem = document.createElement('button');
-    btnRem.textContent = 'Remove';
-    btnRem.className = 'btn btn-danger btn-sm';
-    btnRem.onclick = () => ensureWS(()=>ws.send(JSON.stringify({ type:'host:remove-player', participantId: b.id, playerId: player.id })));
-    const btnRe = document.createElement('button');
-    btnRe.textContent = 'Reassign';
-    btnRe.className = 'btn btn-ghost btn-sm';
-    btnRe.onclick = () => {
-      const others = (usersCache||[]).filter(u => u.participantId && u.participantId !== b.id);
-      const choices = others.map(u => `${u.participantId} - ${u.name}`).join('\n');
-      const toId = prompt('Assegna a quale partecipante?\n'+choices, others[0]?.participantId || '');
-      if (toId) ensureWS(()=>ws.send(JSON.stringify({ type:'host:reassign-player', fromId: b.id, toId, playerId: player.id })));
-    };
-    td.appendChild(btnRem);
-    td.appendChild(btnRe);
-  }
-}
-tr.appendChild(td);
+        const det = document.createElement('details');
+        det.className = 'roster-card';
+        const sum = document.createElement('summary');
+        sum.textContent = b.name;
+        det.appendChild(sum);
+        roleOrder.forEach(r => {
+          const arr = byBidder[b.id][r];
+          if (!arr.length) return;
+          const roleWrap = document.createElement('div');
+          const title = document.createElement('div');
+          title.className = 'roster-role-title';
+          title.textContent = roleLabels[r] || r;
+          roleWrap.appendChild(title);
+          const ul = document.createElement('ul');
+          ul.className = 'roster-role-list';
+          arr.forEach(player => {
+            const li = document.createElement('li');
+            if (player.fascia) li.classList.add('fascia-' + player.fascia);
+            const imgSrc = player.img ? `/img-proxy?u=${encodeURIComponent(player.img)}` : '/placeholder.jpg';
+            li.innerHTML = `<img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:contain;"> <span>${escapeHtml(player.name||'')}</span> <span class="mono">${player.price ?? 0}</span>`;
+            if (myRole === 'host') {
+              const btnRem = document.createElement('button');
+              btnRem.textContent = 'Remove';
+              btnRem.className = 'btn btn-danger btn-sm';
+              btnRem.onclick = () => ensureWS(()=>ws.send(JSON.stringify({ type:'host:remove-player', participantId: b.id, playerId: player.id })));
+              const btnRe = document.createElement('button');
+              btnRe.textContent = 'Reassign';
+              btnRe.className = 'btn btn-ghost btn-sm';
+              btnRe.onclick = () => {
+                const others = (usersCache||[]).filter(u => u.participantId && u.participantId !== b.id);
+                const choices = others.map(u => `${u.participantId} - ${u.name}`).join('\n');
+                const toId = prompt('Assegna a quale partecipante?\n'+choices, others[0]?.participantId || '');
+                if (toId) ensureWS(()=>ws.send(JSON.stringify({ type:'host:reassign-player', fromId: b.id, toId, playerId: player.id })));
+              };
+              li.appendChild(btnRem);
+              li.appendChild(btnRe);
+            }
+            ul.appendChild(li);
+          });
+          roleWrap.appendChild(ul);
+          det.appendChild(roleWrap);
+        });
+        wrap.appendChild(det);
       });
-      tbody.appendChild(tr);
+    } else {
+      const table = document.createElement('table');
+      table.className = 'roster-table';
+      const thead = document.createElement('thead');
+      const headRow = document.createElement('tr');
+      bidders.forEach(b => {
+        const th = document.createElement('th');
+        th.textContent = b.name;
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+
+      roleOrder.forEach(r => {
+        let max = 0;
+        bidders.forEach(b => { max = Math.max(max, byBidder[b.id][r].length); });
+        for (let i = 0; i < max; i++) {
+          const tr = document.createElement('tr');
+          bidders.forEach(b => {
+            const player = byBidder[b.id][r][i];
+            const td = document.createElement('td');
+            if (player) {
+              td.classList.add('player-td');
+              if (player.fascia) td.classList.add('fascia-' + player.fascia);
+              const imgSrc = player.img ? `/img-proxy?u=${encodeURIComponent(player.img)}` : '/placeholder.jpg';
+              td.innerHTML = `<img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:contain;"> <span>${escapeHtml(player.name||'')}</span> <span class="mono">${player.price ?? 0}</span>`;
+              if (myRole === 'host') {
+                const btnRem = document.createElement('button');
+                btnRem.textContent = 'Remove';
+                btnRem.className = 'btn btn-danger btn-sm';
+                btnRem.onclick = () => ensureWS(()=>ws.send(JSON.stringify({ type:'host:remove-player', participantId: b.id, playerId: player.id })));
+                const btnRe = document.createElement('button');
+                btnRe.textContent = 'Reassign';
+                btnRe.className = 'btn btn-ghost btn-sm';
+                btnRe.onclick = () => {
+                  const others = (usersCache||[]).filter(u => u.participantId && u.participantId !== b.id);
+                  const choices = others.map(u => `${u.participantId} - ${u.name}`).join('\n');
+                  const toId = prompt('Assegna a quale partecipante?\n'+choices, others[0]?.participantId || '');
+                  if (toId) ensureWS(()=>ws.send(JSON.stringify({ type:'host:reassign-player', fromId: b.id, toId, playerId: player.id })));
+                };
+                td.appendChild(btnRem);
+                td.appendChild(btnRe);
+              }
+            }
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        }
+      });
+
+      table.appendChild(tbody);
+      wrap.appendChild(table);
     }
   });
-
-  table.appendChild(tbody);
-  wrap.appendChild(table);
 }
 
 window.addEventListener('resize', () => renderRosters(rosterCache));
@@ -2632,7 +2637,19 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
                 </table>
           </div>
         </div>
-         <div class="section full" id="invitesSection">
+        <div class="section full">
+          <div id="rosterCard" class="roster-container">
+            <div class="roster-header">Rosters
+              <select id="rosterViewMode" class="roster-view-select">
+                <option value="auto">Auto</option>
+                <option value="table">Tabella</option>
+                <option value="cards">Card</option>
+              </select>
+            </div>
+            <div id="rosterList"></div>
+          </div>
+        </div>
+        <div class="section full" id="invitesSection">
           <div class="section-title">Inviti</div>
 
 			  <!-- Crea invito PRIMA che l'utente entri -->
@@ -2716,15 +2733,15 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
       <div id="bidderLast3Row" style="display:none;">Ultimi 3: <b id="itemLast3Bid">—</b></div>
     </div>
   </div>
-  <div id="rosterCard" class="roster-container">
+  <div id="rosterCardBidder" class="roster-container">
     <div class="roster-header">Rosters
-      <select id="rosterViewMode" class="roster-view-select">
+      <select id="rosterViewModeBidder" class="roster-view-select">
         <option value="auto">Auto</option>
         <option value="table">Tabella</option>
         <option value="cards">Card</option>
       </select>
     </div>
-    <div id="rosterList"></div>
+    <div id="rosterListBidder"></div>
   </div>
   <div class="row" id="bidInputRow">
     <input id="bidAmount" type="number" min="1" placeholder="Offerta precisa" />
@@ -2834,14 +2851,16 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 </div>
       `;
       document.body.appendChild(root);
-      const rosterSel = $('rosterViewMode');
-      if (rosterSel) {
-        rosterSel.addEventListener('change', () => {
-          const v = rosterSel.value;
-          rosterViewOverride = v === 'auto' ? null : v;
-          renderRosters(rosterCache);
-        });
-      }
+      ['rosterViewMode', 'rosterViewModeBidder'].forEach(id => {
+        const rosterSel = $(id);
+        if (rosterSel) {
+          rosterSel.addEventListener('change', () => {
+            const v = rosterSel.value;
+            rosterViewOverride = v === 'auto' ? null : v;
+            renderRosters(rosterCache);
+          });
+        }
+      });
           // Stato iniziale bidder: bottoni disabilitati e righe nascoste
           setBidButtonsEnabled(false);
   const metaRowInit = document.getElementById('bidderMetaRow');
