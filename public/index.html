@@ -491,15 +491,58 @@
 	  max-height: 42vh;
 	  font-size: clamp(18px, 2.2vw, 28px);
 	}
-	.is-fullscreen .mon-img{
-	  max-width: 70vw;
-	  max-height: 76vh;
-	}
-
+        .is-fullscreen .mon-img{
+          max-width: 70vw;
+          max-height: 76vh;
+        }
+        
+        /* Off-canvas info panel */
+        #infoPanel {
+          position: fixed;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          width: 80%;
+          max-width: 320px;
+          background: #fff;
+          box-shadow: -2px 0 8px rgba(0,0,0,.2);
+          transform: translateX(100%);
+          transition: transform .3s ease;
+          overflow-y: auto;
+          z-index: 10000;
+        }
+        .info-panel-open #infoPanel { transform: translateX(0); }
+        #infoPanel .panel-section { display:none; padding:16px; }
+        #infoPanel .panel-section.active { display:block; }
+        #infoPanel .info-close {
+          position: absolute;
+          top:8px; right:8px;
+          background:none;
+          border:none;
+          font-size:24px;
+        }
+        #infoOverlay {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          display: flex;
+          justify-content: space-around;
+          padding: 8px;
+          background: rgba(255,255,255,0.95);
+          box-shadow: 0 -2px 8px rgba(0,0,0,.15);
+          z-index: 10001;
+        }
+        #infoOverlay button {
+          background: none;
+          border: none;
+          font-size: 24px;
+          padding: 8px;
+        }
 
   </style>
   <script>
-	// === Fullscreen helpers ===
+        // === Fullscreen helpers ===
 	function isFullscreen() {
 	  return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
 	}
@@ -3329,8 +3372,72 @@ document.addEventListener('DOMContentLoaded', () => {
         window.onHostStopRound  = onHostStopRound;
         window.onToggleBidderDetails = onToggleBidderDetails;
         window.onToggleBidderRoster = onToggleBidderRoster;
+
+    // === Info panel controls ===
+    document.addEventListener('DOMContentLoaded', () => {
+      const panel = document.getElementById('infoPanel');
+      const overlay = document.getElementById('infoOverlay');
+      const closeBtn = document.getElementById('closeInfoPanel');
+      const sections = panel.querySelectorAll('.panel-section');
+      let active = null;
+
+      function openPanel(id) {
+        sections.forEach(sec => {
+          const match = sec.id === id;
+          sec.classList.toggle('active', match);
+          if (match) active = id;
+        });
+        document.body.classList.add('info-panel-open');
+      }
+
+      function closePanel() {
+        document.body.classList.remove('info-panel-open');
+        sections.forEach(sec => sec.classList.remove('active'));
+        active = null;
+      }
+
+      overlay.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-target]');
+        if (!btn) return;
+        const target = btn.getAttribute('data-target');
+        if (active === target && document.body.classList.contains('info-panel-open')) {
+          closePanel();
+        } else {
+          openPanel(target);
+        }
+      });
+      closeBtn.addEventListener('click', closePanel);
+
+      let startX = 0;
+      panel.addEventListener('touchstart', e => { startX = e.touches[0].clientX; });
+      panel.addEventListener('touchend', e => {
+        const dx = e.changedTouches[0].clientX - startX;
+        if (dx > 50) closePanel();
+      });
+    });
   </script>
 </head>
-<body></body>
+<body>
+  <div id="infoPanel">
+    <button id="closeInfoPanel" class="info-close" aria-label="Chiudi pannello">&times;</button>
+    <section id="infoRoster" class="panel-section">
+      <h2>Roster</h2>
+      <div id="infoRosterContent"></div>
+    </section>
+    <section id="infoHistory" class="panel-section">
+      <h2>Cronologia</h2>
+      <div id="infoHistoryContent"></div>
+    </section>
+    <section id="infoProfile" class="panel-section">
+      <h2>Profilo</h2>
+      <div id="infoProfileContent"></div>
+    </section>
+  </div>
+  <div id="infoOverlay">
+    <button class="info-btn" data-target="infoRoster" aria-label="Roster"><i class="fa-solid fa-people-group"></i></button>
+    <button class="info-btn" data-target="infoHistory" aria-label="Info asta"><i class="fa-solid fa-clock-rotate-left"></i></button>
+    <button class="info-btn" data-target="infoProfile" aria-label="Profilo"><i class="fa-solid fa-user"></i></button>
+  </div>
+</body>
 </html>
 
