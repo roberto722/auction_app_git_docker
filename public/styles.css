@@ -85,7 +85,7 @@
     #mobileAuctionOverlay .mobile-overlay-left { flex:1; }
     #mobileAuctionOverlay .mobile-overlay-right { flex:0 0 auto; margin-left:var(--spacing-sm); }
     #mobileAuctionOverlay .bid-bottom-bar { margin-top:var(--spacing-sm); }
-    .player-img { width:64px; height:64px; object-fit:cover; border-radius:8px; }
+    .player-img { width:64px; height:64px; object-fit:contain; border-radius:8px; }
 
     @media (min-width: 601px) {
       #mobileAuctionOverlay { display:none; }
