@@ -70,6 +70,7 @@
     let ws = null, isHost = false;
     let currentPrice = 0, currentBidder = null, currentItem = null;
     let last3Cache = [];
+    let bidHistory = [];
     let showBidderDetails = false;
     let showBidderRoster = false;
     let countdownVal = 0, tInt = null; // tInt userà requestAnimationFrame
@@ -1088,6 +1089,15 @@ if (d.type === 'state' || d.type === 'auction-started' || d.type === 'new-bid') 
   if (d.item) currentItem = d.item;
   else if (d.playerName != null) currentItem = { ...(currentItem||{}), name: d.playerName };
 
+  if (d.type === 'auction-started' || d.type === 'state') {
+    bidHistory = Array.isArray(d.last3) ? d.last3.slice() : [];
+    renderHistory();
+  } else if (d.type === 'new-bid') {
+    bidHistory.push({ name: d.name || d.bidder || '', amount: Number(d.amount || d.price || 0) });
+    if (bidHistory.length > 20) bidHistory = bidHistory.slice(-20);
+    renderHistory();
+  }
+
   if (myRole === 'monitor') {
     setMonPrice(d.amount || d.price || 0);
     renderLast3Chips(d.last3 || []);
@@ -1180,14 +1190,16 @@ if (d.type === 'user-list') {
       renderInviteUsersSelect();
       renderRosters(rosterCache);
       if (myRole === 'bidder' && myParticipantId) {
-const me = usersCache.find(u => u.participantId === myParticipantId);
-if (me) updateBidderBudget(me);
+        renderProfile();
       }
     }).catch(()=>{
       usersCache = base;
       renderUsers(usersCache);
       renderInviteUsersSelect();
       renderRosters(rosterCache);
+      if (myRole === 'bidder' && myParticipantId) {
+        renderProfile();
+      }
     });
   } else {
     usersCache = base;
@@ -1195,8 +1207,7 @@ if (me) updateBidderBudget(me);
     renderInviteUsersSelect();
     renderRosters(rosterCache);
     if (myRole === 'bidder' && myParticipantId) {
-      const me = usersCache.find(u => u.participantId === myParticipantId);
-      if (me) updateBidderBudget(me);
+      renderProfile();
     }
   }
   return;
@@ -1323,22 +1334,76 @@ function getMyUser(){
 
 
     function updateBidderBudget(me){
-	  const credits = Number(me.credits || 0);
-	  const initCr  = Number(me.initialCredits ?? credits);
-	  const S       = me.slotsByRole || {};
-	  const spent   = Math.max(0, initCr - credits);
-	  const maxBid  = computeMaxBid(credits, S);
+          const credits = Number(me.credits || 0);
+          const initCr  = Number(me.initialCredits ?? credits);
+          const S       = me.slotsByRole || {};
+          const spent   = Math.max(0, initCr - credits);
+          const maxBid  = computeMaxBid(credits, S);
 
-	  setText('meCredits', credits);
-	  setText('meSpent', spent);
-	  setText('meMaxBid', maxBid);
+          setText('meCredits', credits);
+          setText('meSpent', spent);
+          setText('meMaxBid', maxBid);
 
-	  // Se hai gli indicatori slot nel pannello bidder:
-	  setText('meSlotsPor', Number(S.por ?? 0));
-	  setText('meSlotsDif', Number(S.dif ?? 0));
-	  setText('meSlotsCen', Number(S.cen ?? 0));
-	  setText('meSlotsAtt', Number(S.att ?? 0));
-	}
+          // Se hai gli indicatori slot nel pannello bidder:
+          setText('meSlotsPor', Number(S.por ?? 0));
+          setText('meSlotsDif', Number(S.dif ?? 0));
+          setText('meSlotsCen', Number(S.cen ?? 0));
+          setText('meSlotsAtt', Number(S.att ?? 0));
+        }
+
+        function renderProfile(){
+          const box = document.getElementById('infoProfileContent');
+          if (!box) return;
+          const me = getMyUser();
+          box.innerHTML = '';
+          if (!me) {
+                box.innerHTML = '<div class="info-box">Dati profilo non disponibili</div>';
+                return;
+          }
+          updateBidderBudget(me);
+          const S = me.slotsByRole || {};
+          const spent = Math.max(0, Number(me.initialCredits ?? 0) - Number(me.credits || 0));
+          const maxBid = computeMaxBid(me.credits, S);
+          const prof = document.createElement('div');
+          prof.className = 'info-box';
+          prof.innerHTML = `
+            <div><b>${escapeHtml(me.name || '')}</b></div>
+            <div>Crediti: ${me.credits ?? 0}</div>
+            <div>Spesi: ${spent}</div>
+            <div>Max puntata: ${maxBid}</div>
+          `;
+          const slots = document.createElement('div');
+          slots.className = 'info-box';
+          slots.innerHTML = `
+            <div><b>Slot rimanenti</b></div>
+            <div>POR: ${S.por||0}</div>
+            <div>DIF: ${S.dif||0}</div>
+            <div>CEN: ${S.cen||0}</div>
+            <div>ATT: ${S.att||0}</div>
+          `;
+          box.appendChild(prof);
+          box.appendChild(slots);
+        }
+
+        function renderHistory(){
+          const box = document.getElementById('infoHistoryContent');
+          if (!box) return;
+          box.innerHTML = '';
+          if (!bidHistory.length) {
+                box.innerHTML = '<div class="info-box">Nessuna puntata</div>';
+                return;
+          }
+          const wrap = document.createElement('div');
+          wrap.className = 'info-box';
+          const ul = document.createElement('ul');
+          bidHistory.slice().reverse().forEach(b => {
+                const li = document.createElement('li');
+                li.textContent = `${b.name} — ${b.amount}`;
+                ul.appendChild(li);
+          });
+          wrap.appendChild(ul);
+          box.appendChild(wrap);
+        }
 
 
     // Mappa ruolo → classe colore
@@ -1455,10 +1520,9 @@ if ((d.type === 'auction-started' || (d.type === 'state' && (d.item || d.playerN
 		  hideAssignBanner();
 		}
 		
-		if (myRole === 'bidder') {
-		  const me = getMyUser();
-		  if (me) updateBidderBudget(me);
-		}
+                if (myRole === 'bidder') {
+                  renderProfile();
+                }
 		
 		if ((d.type === 'auction-started' || d.type === 'state') && d.item && d.item.name) {
 		  addCalledForPlayerObj({
@@ -2851,4 +2915,7 @@ if (active === target && document.body.classList.contains('info-panel-open')) {
 const dx = e.changedTouches[0].clientX - startX;
 if (dx > 50) closePanel();
       });
+
+      renderProfile();
+      renderHistory();
     });
