@@ -1969,7 +1969,9 @@ function renderRosters(map){
       });
     } else {
       const table = document.createElement('table');
-      table.className = 'roster-table';
+      table.className = 'roster-table fancy-table';
+      const tableWrap = document.createElement('div');
+      tableWrap.className = 'table-wrap';
       const thead = document.createElement('thead');
       const headRow = document.createElement('tr');
       bidders.forEach(b => {
@@ -2021,7 +2023,8 @@ function renderRosters(map){
       });
 
       table.appendChild(tbody);
-      wrap.appendChild(table);
+      tableWrap.appendChild(table);
+      wrap.appendChild(tableWrap);
     }
   });
 }
