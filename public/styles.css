@@ -282,6 +282,7 @@
           font-size: var(--font-size-base);
           border-radius: var(--spacing-sm);
           border: 1px solid #ccc;
+          transition: .2s;
         }
 
         .login-card button {
@@ -289,6 +290,15 @@
           font-size: 18px;
           padding: var(--spacing-md);
           border-radius: var(--spacing-sm);
+          transition: .2s;
+        }
+        .login-card button:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        }
+        .login-card input:focus {
+          border-color: var(--color-primary);
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
         }
         .login-card .logo {
           width: 120px;
