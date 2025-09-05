@@ -93,7 +93,7 @@
         overflow:auto;
       }
       .big { font-size: 28px; font-weight: 700; }
-      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .mono { }
 
       .roster-view-select { margin-left: var(--spacing-sm); }
       .roster-card { border:1px solid var(--color-border); border-radius:var(--spacing-sm); padding:var(--spacing-sm); margin-bottom:var(--spacing-sm); }
