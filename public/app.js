@@ -2473,7 +2473,7 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 <!-- LOGIN CARD -->
 <div class="card login-card" id="loginCard">
   <div class="section">
-    <img src="logo_FAM_login.jpg" class="logo" alt="Logo" />
+    <img src="logo_FAM_login.png" class="logo" alt="Logo" />
     <p class="tagline">La tua asta, semplificata</p>
     <div class="section-title">Entra nell'asta</div>
     <div class="row"><input id="joinName" type="text" placeholder="Il tuo nome" /></div>
