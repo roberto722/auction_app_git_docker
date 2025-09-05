@@ -297,6 +297,8 @@
         .section {
           border:1px solid var(--color-border); border-radius:var(--spacing-md); padding:var(--spacing-md);
           background:#fff;
+          min-width:0;
+          overflow-x:auto;
         }
         .section-title {
           font-weight:700; margin-bottom:var(--spacing-sm);
