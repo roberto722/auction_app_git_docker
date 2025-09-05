@@ -120,6 +120,14 @@
       .roster-role-list li { display:flex; align-items:center; gap:var(--spacing-sm); justify-content:space-between; padding:var(--spacing-xs) 0; }
       .roster-card img { width:32px; height:32px; object-fit:contain; }
 
+@media (max-width: 600px) {
+  .roster-table td,
+  .roster-role-list li,
+  .player-td-content .mono {
+    font-size: 10px;
+  }
+}
+
     /* Fullscreen base */
     html, body { height: 100%; }
 
