@@ -1891,12 +1891,13 @@ function renderRosters(map){
   if (!wraps.length) return;
   wraps.forEach(w => w.innerHTML = '');
 
-  const bidderIds = Array.from(new Set([
-    ...Object.keys(rosterCache),
-    ...(usersCache||[]).map(u => u.participantId).filter(Boolean)
-  ]));
+  const bidderIds = [
+    ...(usersCache || []).map(u => String(u.participantId)).filter(Boolean),
+    ...Object.keys(rosterCache).filter(id =>
+      !(usersCache || []).some(u => String(u.participantId) === id))
+  ];
   const bidders = bidderIds.map(pid => {
-    const u = (usersCache||[]).find(x => x.participantId === pid);
+    const u = (usersCache || []).find(x => String(x.participantId) === pid);
     return { id: pid, name: u ? (u.name || pid) : pid };
   });
 
