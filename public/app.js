@@ -2476,16 +2476,21 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
     <img src="logo_FAM_login.png" class="logo" alt="Logo" />
     <p class="tagline">La tua asta, semplificata</p>
     <div class="section-title">Entra nell'asta</div>
-    <div class="row"><input id="joinName" type="text" placeholder="Il tuo nome" /></div>
-    <div class="row">
-      <select id="joinRole">
+    <div class="row form-row">
+      <label for="joinName">Il tuo nome</label>
+      <input id="joinName" type="text" placeholder="Il tuo nome" aria-label="Il tuo nome" />
+    </div>
+    <div class="row form-row">
+      <label for="joinRole">Ruolo</label>
+      <select id="joinRole" aria-label="Ruolo">
 <option value="bidder">Partecipante</option>
 <option value="monitor">Monitor esterno</option>
 <option value="host">Gestore</option>
       </select>
     </div>
-    <div class="row" id="pinRow" style="display:none;">
-      <input id="hostPin" type="password" placeholder="PIN gestore" />
+    <div class="row form-row" id="pinRow" style="display:none;">
+      <label for="hostPin">PIN gestore</label>
+      <input id="hostPin" type="password" placeholder="PIN gestore" aria-label="PIN gestore" />
     </div>
     <div class="row"><button class="btn btn-primary" id="loginBtn">Entra</button></div>
   </div>

@@ -31,6 +31,10 @@
       color: #222;
     }
     body.info-overlay-active { padding-bottom: var(--info-overlay-height, 0px); }
+    @media (max-width: 480px) {
+      :root { --font-size-base: 14px; }
+      body { margin: var(--spacing-md); }
+    }
     .grid { display:grid; gap:var(--spacing-lg); grid-template-columns: 1fr; }
     .card {
       border:1px solid var(--color-border);
@@ -64,6 +68,7 @@
   }
 }
     .row { display:grid; grid-template-columns: 1fr auto; gap:var(--spacing-sm); margin:var(--spacing-sm) 0; }
+    .form-row { grid-template-columns: auto 1fr; align-items: center; }
     input, button { padding:var(--spacing-sm); font-size:var(--font-size-base); }
     #status { padding:var(--spacing-sm); border-radius:var(--spacing-sm); background:var(--color-bg); min-height:2.2em; }
     .ok { color:#0a7a0a; } .err { color:#b00020; }
