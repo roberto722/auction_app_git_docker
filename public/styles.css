@@ -91,6 +91,11 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      table.roster-table th small {
+        display: block;
+        font-size: 0.75em;
+        color: #555;
+      }
       .player-td {
         display: table-cell;
         max-width: 200px;
