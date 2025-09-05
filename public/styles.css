@@ -107,7 +107,7 @@
     html, body { height: 100%; }
 
     /* Bidder layout */
-    #bidderCard { display: flex; flex-direction: column; height: 100%; }
+    #bidderCard { display: flex; flex-direction: column; height: 100%; width: 100%; max-width: 500px; margin-left: auto; margin-right: auto; }
     .player-display { display: flex; align-items: center; gap: var(--spacing-md); }
     .player-photo { width: 64px; height: 64px; object-fit: contain; }
     .bidder-secondary { display: grid; grid-template-columns: 1fr; gap: var(--spacing-md); margin: var(--spacing-md) 0; }
@@ -146,7 +146,7 @@
       #bidderMetaBox div { margin:2px 0; }
       #bidInputRow { display:none; }
       #mobileAuctionOverlay { display:flex; }
-      #bidderCard { margin-top: var(--overlay-height, 0px); }
+      #bidderCard { margin-top: var(--overlay-height, 0px); margin-left: auto; margin-right: auto; }
     }
 
     /* Monitor layout */
