@@ -82,12 +82,15 @@
         text-overflow: ellipsis;
       }
       .player-td {
-        display: flex;
+        display: table-cell;
         max-width: 200px;
-        align-items: center;
-        justify-content: space-around;
-                gap: 7px;
-                overflow: overlay;
+      }
+      .player-td-content {
+        display:flex;
+        align-items:center;
+        gap:7px;
+        justify-content:space-around;
+        overflow:auto;
       }
       .big { font-size: 28px; font-weight: 700; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
