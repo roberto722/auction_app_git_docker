@@ -306,6 +306,7 @@
           border-radius: var(--spacing-sm);
           border: 1px solid #ccc;
           transition: .2s;
+          box-sizing: border-box;
         }
 
         .login-card button {
@@ -314,6 +315,7 @@
           padding: var(--spacing-md);
           border-radius: var(--spacing-sm);
           transition: .2s;
+          box-sizing: border-box;
         }
         .login-card button:hover {
           transform: translateY(-2px);
