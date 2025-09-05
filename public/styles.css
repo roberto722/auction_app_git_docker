@@ -74,7 +74,7 @@
     .ok { color:#0a7a0a; } .err { color:#b00020; }
       table { border-collapse:collapse; }
       th, td { border:1px solid var(--color-border); padding:6px; text-align:center; }
-      table.roster-table { max-width:100%; table-layout:fixed; }
+      table.roster-table { table-layout:auto; }
       table.roster-table th {
         max-width: 200px;
         white-space: nowrap;
@@ -300,8 +300,8 @@
 
         /* Tabelle grandi e comode */
         .table-wrap { border:1px solid #eee; border-radius:var(--spacing-md); overflow-x:auto; }
-        .table-wrap table { width:100%; border-collapse:collapse; }
-        .table-wrap th, .table-wrap td { padding:var(--spacing-md); }
+        .table-wrap table { border-collapse:collapse; min-width:100%; }
+        .table-wrap th, .table-wrap td { padding:var(--spacing-md); min-width:100px; }
         .table-wrap--log { max-height: 320px; overflow-y:auto; } /* un po’ più alta */
 
         /* Pills */
