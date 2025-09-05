@@ -1988,7 +1988,7 @@ function renderRosters(map){
               td.classList.add('player-td');
               if (player.fascia) td.classList.add('fascia-' + player.fascia);
               const imgSrc = player.img ? `/img-proxy?u=${encodeURIComponent(player.img)}` : '/placeholder.jpg';
-              td.innerHTML = `<img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:contain;"> <span>${escapeHtml(player.name||'')}</span> <span class="mono">${player.price ?? 0}</span>`;
+              td.innerHTML = `<div class="player-td-content"><img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:contain;"> <span>${escapeHtml(player.name||'')}</span> <span class="mono">${player.price ?? 0}</span></div>`;
               if (myRole === 'host') {
                 const btnRem = document.createElement('button');
                 btnRem.textContent = 'Remove';
@@ -2003,8 +2003,9 @@ function renderRosters(map){
                   const toId = prompt('Assegna a quale partecipante?\n'+choices, others[0]?.participantId || '');
                   if (toId) ensureWS(()=>ws.send(JSON.stringify({ type:'host:reassign-player', fromId: b.id, toId, playerId: player.id })));
                 };
-                td.appendChild(btnRem);
-                td.appendChild(btnRe);
+                const contentDiv = td.querySelector('.player-td-content');
+                contentDiv.appendChild(btnRem);
+                contentDiv.appendChild(btnRe);
               }
             }
             tr.appendChild(td);
