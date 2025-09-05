@@ -114,6 +114,8 @@ let calledPlayers = new Set();
           try { localStorage.removeItem('inviteToken'); } catch {}
           try { localStorage.removeItem('clientId'); } catch {}
           try { localStorage.removeItem('hostPin'); } catch {}
+          try { localStorage.removeItem('lastLogin'); } catch {}
+          try { localStorage.setItem('logout', '1'); } catch {}
 
           // chiudi eventuale WS
   try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, 'logout'); } catch {}
@@ -273,12 +275,17 @@ let calledPlayers = new Set();
         }
 
         function autoRejoin(){
-	  // 1) preferisci il token invito se presente
-	  const token = localStorage.getItem('inviteToken');
-	  if (token) {
-		ws.send(JSON.stringify({ type:'join-by-invite', token }));
-		// se l’utente aveva selezionato host in precedenza, prova il PIN salvato
-		const last = JSON.parse(localStorage.getItem('lastLogin') || '{}');
+          const wasLogout = localStorage.getItem('logout');
+          if (wasLogout) {
+            try { localStorage.removeItem('logout'); } catch {}
+            return;
+          }
+          // 1) preferisci il token invito se presente
+          const token = localStorage.getItem('inviteToken');
+          if (token) {
+                ws.send(JSON.stringify({ type:'join-by-invite', token }));
+                // se l’utente aveva selezionato host in precedenza, prova il PIN salvato
+                const last = JSON.parse(localStorage.getItem('lastLogin') || '{}');
 		if (last?.role === 'host' && last?.pin) {
 		  ws.send(JSON.stringify({ type:'host-login', pin: last.pin }));
 		}
