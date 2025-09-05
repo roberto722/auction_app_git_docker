@@ -115,9 +115,12 @@ let calledPlayers = new Set();
           try { localStorage.removeItem('clientId'); } catch {}
           try { localStorage.removeItem('hostPin'); } catch {}
 
-	  // chiudi eventuale WS
+          // chiudi eventuale WS
   try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, 'logout'); } catch {}
   ws = null; isHost = false; myRole = null; myId = null; myParticipantId = null; myName = '';
+          document.getElementById('infoPanel')?.style?.setProperty('display', 'none');
+          document.getElementById('infoOverlay')?.style?.setProperty('display', 'none');
+          document.getElementById('loginCard')?.style?.setProperty('display', 'block');
 
           // torna alla schermata iniziale
           location.href = '/';
@@ -1033,11 +1036,15 @@ if (d.type === 'joined') {
 			return;
 		  }
 
-		  // Altrimenti, flusso normale bidder/monitor
-		  setStatus(`Benvenuto ${d.name}! (${myRole})`, true);
-		  document.getElementById('loginCard')?.style?.setProperty('display', 'none');
-		  if (myRole === 'bidder') {
-			document.getElementById('bidderCard').style.display = 'block';
+                  // Altrimenti, flusso normale bidder/monitor
+                  setStatus(`Benvenuto ${d.name}! (${myRole})`, true);
+                  document.getElementById('loginCard')?.style?.setProperty('display', 'none');
+                  const infoPanel = document.getElementById('infoPanel');
+                  if (infoPanel) infoPanel.style.display = 'block';
+                  const infoOverlay = document.getElementById('infoOverlay');
+                  if (infoOverlay) infoOverlay.style.display = 'flex';
+                  if (myRole === 'bidder') {
+                        document.getElementById('bidderCard').style.display = 'block';
                         const row = document.getElementById('bidderMetaRow'); if (row) row.style.display = 'none';
                         const rowCountdown = document.getElementById('bidderCountdownRow'); if (rowCountdown) rowCountdown.style.display = 'none';
                   }
