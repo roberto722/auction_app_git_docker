@@ -1904,7 +1904,7 @@ function renderRosters(map){
   ]));
   const bidders = bidderIds.map(pid => {
     const u = (usersCache || []).find(x => String(x.participantId) === pid);
-    return { id: pid, name: u ? (u.name || pid) : pid };
+    return { id: pid, name: u ? (u.name || pid) : pid, credits: u?.credits ?? 0 };
   });
 
   const roleOrder = ['P','D','C','A'];
@@ -1926,7 +1926,7 @@ function renderRosters(map){
         const det = document.createElement('details');
         det.className = 'roster-card';
         const sum = document.createElement('summary');
-        sum.textContent = b.name;
+        sum.innerHTML = `${b.name}<br><small class="mono">Cr: ${b.credits}</small>`;
         det.appendChild(sum);
         roleOrder.forEach(r => {
           const arr = byBidder[b.id][r];
@@ -1980,7 +1980,7 @@ function renderRosters(map){
       const headRow = document.createElement('tr');
       bidders.forEach(b => {
         const th = document.createElement('th');
-        th.textContent = b.name;
+        th.innerHTML = `${b.name}<br><small class="mono">Cr: ${b.credits}</small>`;
         headRow.appendChild(th);
       });
       thead.appendChild(headRow);
