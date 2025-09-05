@@ -123,6 +123,7 @@ let calledPlayers = new Set();
           document.getElementById('infoPanel')?.style?.setProperty('display', 'none');
           document.getElementById('infoOverlay')?.style?.setProperty('display', 'none');
           document.getElementById('loginCard')?.style?.setProperty('display', 'block');
+          document.getElementById('mobileAuctionOverlay')?.style?.setProperty('display', 'none');
 
           // torna alla schermata iniziale
           location.href = '/';
