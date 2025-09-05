@@ -2772,6 +2772,10 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 
   <div class="card" id="bidderCard" style="display:none;">
   <h2>Partecipante</h2>
+  <div id="bidderNominateBox" style="display:none;">
+    Tocca a: <b id="roundWhoseTurn">—</b>
+    <button id="openNomBtn" class="btn" onclick="openNominateModal()">Nomina giocatore</button>
+  </div>
   <div id="bidderSecondaryInfo" class="bidder-secondary">
     <div id="bidderMetaBox" class="info-box">
       <div id="bidderCountdownRow">Countdown: <b id="countdownBid">—</b></div>
@@ -2789,10 +2793,6 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
       </select>
     </div>
     <div id="rosterListBidder"></div>
-  </div>
-  <div id="bidderNominateBox" style="display:none;">
-    Tocca a: <b id="roundWhoseTurn">—</b>
-    <button id="openNomBtn" class="btn" onclick="openNominateModal()">Nomina giocatore</button>
   </div>
   <div class="row" id="bidInputRow">
     <input id="bidAmount" type="number" min="1" placeholder="Offerta precisa" />
