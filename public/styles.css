@@ -27,7 +27,7 @@
     body {
       font-family: var(--font-base);
       margin: var(--spacing-xl);
-      background: linear-gradient(135deg, #d5e7da, #3c774b);
+      background: linear-gradient(90deg, #d5e7da, #3c774b);
       color: #222;
     }
     body.info-overlay-active { padding-bottom: var(--info-overlay-height, 0px); }
