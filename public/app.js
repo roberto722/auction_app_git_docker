@@ -85,6 +85,7 @@ let playersView  = [];     // giocatori attualmente mostrati (filtrati/ordinati)
     let myRole = null; // 'host' | 'monitor' | 'bidder'
     let myId = null;
     let myParticipantId = null;
+    let myName = '';
     let usersCache = [];
     let rosterCache = {};
     let rosterViewOverride = null; // 'table' | 'cards' | null (auto)
@@ -116,7 +117,7 @@ let calledPlayers = new Set();
 
 	  // chiudi eventuale WS
   try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, 'logout'); } catch {}
-  ws = null; isHost = false; myRole = null; myId = null; myParticipantId = null;
+  ws = null; isHost = false; myRole = null; myId = null; myParticipantId = null; myName = '';
 
           // torna alla schermata iniziale
           location.href = '/';
@@ -1024,6 +1025,7 @@ if (d.type === 'joined') {
   myRole = d.role || 'bidder';
   if (d.clientId) myId = d.clientId;
   if (d.participantId) myParticipantId = d.participantId;
+  myName = d.name || '';
 
 		  // Se stiamo facendo login host, NON cambiare UI qui.
 		  if (pendingHostLogin) {
@@ -1050,6 +1052,16 @@ if (d.type === 'joined') {
   if (rosterHost) rosterHost.style.display = myRole === 'host' ? 'block' : 'none';
   const canShowRoster = myRole === 'host' || (myRole === 'bidder' && showBidderRoster);
   if (rosterBidder) rosterBidder.style.display = canShowRoster ? 'block' : 'none';
+  const histBtn = document.querySelector('button[data-target="infoHistory"]');
+  const histSection = document.getElementById('infoHistory');
+  if (myRole === 'host' || myRole === 'monitor') {
+        if (histBtn) histBtn.style.display = 'none';
+        if (histSection) histSection.style.display = 'none';
+  } else {
+        if (histBtn) histBtn.style.display = '';
+        if (histSection) histSection.style.display = '';
+  }
+  renderProfile();
   return;
 }
 
@@ -1186,26 +1198,20 @@ if (d.type === 'user-list') {
       renderUsers(usersCache);
       renderInviteUsersSelect();
       renderRosters(rosterCache);
-      if (myRole === 'bidder' && myParticipantId) {
-        renderProfile();
-      }
+      renderProfile();
     }).catch(()=>{
       usersCache = base;
       renderUsers(usersCache);
       renderInviteUsersSelect();
       renderRosters(rosterCache);
-      if (myRole === 'bidder' && myParticipantId) {
-        renderProfile();
-      }
+      renderProfile();
     });
   } else {
     usersCache = base;
     renderUsers(usersCache);
     renderInviteUsersSelect();
     renderRosters(rosterCache);
-    if (myRole === 'bidder' && myParticipantId) {
-      renderProfile();
-    }
+    renderProfile();
   }
   return;
 }
@@ -1319,8 +1325,13 @@ if (d.type === 'expelled') { alert('Sei stato espulso'); location.reload(); retu
     }
 	
 function getMyUser(){
-  if (!myParticipantId) return null;
-  return (usersCache||[]).find(u => u.participantId === myParticipantId) || null;
+  if (myParticipantId) {
+    return (usersCache||[]).find(u => u.participantId === myParticipantId) || null;
+  }
+  if (myId) {
+    return (usersCache||[]).find(u => u.id === myId) || null;
+  }
+  return null;
 }
 
 	function getMyMaxBid(){
@@ -1352,40 +1363,48 @@ function getMyUser(){
           const box = document.getElementById('infoProfileContent');
           if (!box) return;
           const me = getMyUser();
+          const name = (me && me.name) || myName;
           box.innerHTML = '';
-          if (!me) {
+          if (!name) {
                 box.innerHTML = '<div class="info-box">Dati profilo non disponibili</div>';
-                return;
+          } else if (myRole === 'bidder' && me) {
+                updateBidderBudget(me);
+                const S = me.slotsByRole || {};
+                const spent = Math.max(0, Number(me.initialCredits ?? 0) - Number(me.credits || 0));
+                const maxBid = computeMaxBid(me.credits, S);
+                const prof = document.createElement('div');
+                prof.className = 'info-box';
+                prof.innerHTML = `
+                  <div><b>${escapeHtml(name)}</b></div>
+                  <div>Crediti: ${me.credits ?? 0}</div>
+                  <div>Spesi: ${spent}</div>
+                  <div>Max puntata: ${maxBid}</div>
+                `;
+                const slots = document.createElement('div');
+                slots.className = 'info-box';
+                slots.innerHTML = `
+                  <div><b>Slot rimanenti</b></div>
+                  <div>POR: ${S.por||0}</div>
+                  <div>DIF: ${S.dif||0}</div>
+                  <div>CEN: ${S.cen||0}</div>
+                  <div>ATT: ${S.att||0}</div>
+                `;
+                box.appendChild(prof);
+                box.appendChild(slots);
+          } else {
+                const prof = document.createElement('div');
+                prof.className = 'info-box';
+                prof.innerHTML = `<div><b>${escapeHtml(name)}</b></div>`;
+                box.appendChild(prof);
           }
-          updateBidderBudget(me);
-          const S = me.slotsByRole || {};
-          const spent = Math.max(0, Number(me.initialCredits ?? 0) - Number(me.credits || 0));
-          const maxBid = computeMaxBid(me.credits, S);
-          const prof = document.createElement('div');
-          prof.className = 'info-box';
-          prof.innerHTML = `
-            <div><b>${escapeHtml(me.name || '')}</b></div>
-            <div>Crediti: ${me.credits ?? 0}</div>
-            <div>Spesi: ${spent}</div>
-            <div>Max puntata: ${maxBid}</div>
-          `;
-          const slots = document.createElement('div');
-          slots.className = 'info-box';
-          slots.innerHTML = `
-            <div><b>Slot rimanenti</b></div>
-            <div>POR: ${S.por||0}</div>
-            <div>DIF: ${S.dif||0}</div>
-            <div>CEN: ${S.cen||0}</div>
-            <div>ATT: ${S.att||0}</div>
-          `;
-          box.appendChild(prof);
-          box.appendChild(slots);
 
-          const logoutBtn = document.createElement('button');
-          logoutBtn.textContent = 'Logout';
-          logoutBtn.className = 'btn btn-danger profile-logout-btn';
-          logoutBtn.addEventListener('click', doLogout);
-          box.appendChild(logoutBtn);
+          if (myRole) {
+                const logoutBtn = document.createElement('button');
+                logoutBtn.textContent = 'Logout';
+                logoutBtn.className = 'btn btn-danger profile-logout-btn';
+                logoutBtn.addEventListener('click', doLogout);
+                box.appendChild(logoutBtn);
+          }
         }
 
         function renderHistory(){
