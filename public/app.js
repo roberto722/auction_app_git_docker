@@ -1942,7 +1942,11 @@ function renderRosters(map){
             const li = document.createElement('li');
             if (player.fascia) li.classList.add('fascia-' + player.fascia);
             const imgSrc = player.img ? `/img-proxy?u=${encodeURIComponent(player.img)}` : '/placeholder.jpg';
-            li.innerHTML = `<img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:contain;"> <span>${escapeHtml(player.name||'')}</span> <span class="mono">${player.price ?? 0}</span>`;
+            li.innerHTML = `<img src="${imgSrc}" alt="" class="player-photo">
+              <div class="player-info">
+                <span class="player-name">${escapeHtml(player.name || '')}</span>
+                <span class="player-price mono">${player.price ?? 0}</span>
+              </div>`;
             if (myRole === 'host') {
               const btnRem = document.createElement('button');
               btnRem.textContent = 'Remove';
@@ -1996,7 +2000,13 @@ function renderRosters(map){
               td.classList.add('player-td');
               if (player.fascia) td.classList.add('fascia-' + player.fascia);
               const imgSrc = player.img ? `/img-proxy?u=${encodeURIComponent(player.img)}` : '/placeholder.jpg';
-              td.innerHTML = `<div class="player-td-content"><img src="${imgSrc}" alt="" style="width:32px;height:32px;object-fit:contain;"> <span>${escapeHtml(player.name||'')}</span> <span class="mono">${player.price ?? 0}</span></div>`;
+              td.innerHTML = `<div class="player-td-content">
+                <img src="${imgSrc}" alt="" class="player-photo">
+                <div class="player-info">
+                  <span class="player-name">${escapeHtml(player.name || '')}</span>
+                  <span class="player-price mono">${player.price ?? 0}</span>
+                </div>
+              </div>`;
               if (myRole === 'host') {
                 const btnRem = document.createElement('button');
                 btnRem.textContent = 'Remove';
