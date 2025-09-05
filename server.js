@@ -458,6 +458,7 @@ function broadcastUsers() {
 function broadcastRoster() {
   const roster = {};
   for (const p of listParticipants()) {
+    if (p.role === 'host' || p.role === 'monitor') continue;
     roster[p.id] = Array.isArray(p.players) ? p.players : [];
   }
   const s = JSON.stringify({ type: 'roster-update', roster });
