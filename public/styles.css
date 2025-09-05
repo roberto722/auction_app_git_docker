@@ -13,10 +13,21 @@
   --spacing-xl: 24px;
 }
 
-    body { font-family: var(--font-base); margin: var(--spacing-xl); }
+    body {
+      font-family: var(--font-base);
+      margin: var(--spacing-xl);
+      background: linear-gradient(135deg, #f0f4ff, #d9e2f3);
+      color: #222;
+    }
     body.info-overlay-active { padding-bottom: var(--info-overlay-height, 0px); }
     .grid { display:grid; gap:var(--spacing-lg); grid-template-columns: 1fr; }
-    .card { border:1px solid var(--color-border); border-radius:var(--spacing-md); padding:var(--spacing-lg); }
+    .card {
+      border:1px solid var(--color-border);
+      border-radius:var(--spacing-md);
+      padding:var(--spacing-lg);
+      background-color: rgba(255,255,255,0.85);
+      backdrop-filter: blur(4px);
+    }
     .roster-container { padding:0; border:none; }
 
 #rosterCard,
