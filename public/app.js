@@ -2790,6 +2790,10 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
     </div>
     <div id="rosterListBidder"></div>
   </div>
+  <div id="bidderNominateBox" style="display:none;">
+    Tocca a: <b id="roundWhoseTurn">—</b>
+    <button id="openNomBtn" class="btn" onclick="openNominateModal()">Nomina giocatore</button>
+  </div>
   <div class="row" id="bidInputRow">
     <input id="bidAmount" type="number" min="1" placeholder="Offerta precisa" />
     <button onclick="onBidCustom()">Punta</button>
