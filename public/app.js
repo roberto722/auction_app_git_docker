@@ -126,7 +126,8 @@ let calledPlayers = new Set();
           document.getElementById('infoPanel')?.style?.setProperty('display', 'none');
           document.getElementById('infoOverlay')?.style?.setProperty('display', 'none');
           document.getElementById('loginCard')?.style?.setProperty('display', 'block');
-          document.getElementById('mobileAuctionOverlay')?.style?.setProperty('display', 'none');
+          document.body.classList.remove('show-mobile-overlay');
+          document.documentElement.style.removeProperty('--overlay-height');
 
           // torna alla schermata iniziale
           location.href = '/';
@@ -1095,6 +1096,15 @@ if (d.type === 'joined') {
                         document.getElementById('bidderCard').style.display = 'block';
                         const row = document.getElementById('bidderMetaRow'); if (row) row.style.display = 'none';
                         const rowCountdown = document.getElementById('bidderCountdownRow'); if (rowCountdown) rowCountdown.style.display = 'none';
+                        document.body.classList.add('show-mobile-overlay');
+                        const mob = document.getElementById('mobileAuctionOverlay');
+                        if (mob) {
+                              mob.style.display = '';
+                              document.documentElement.style.setProperty('--overlay-height', `${mob.offsetHeight}px`);
+                        }
+                  } else {
+                        document.body.classList.remove('show-mobile-overlay');
+                        document.documentElement.style.removeProperty('--overlay-height');
                   }
   if (myRole === 'monitor') {
           showMonitorCard();
