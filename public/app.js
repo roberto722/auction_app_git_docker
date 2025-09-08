@@ -2486,6 +2486,29 @@ function onBidCustom(){
 	  }
 	}
 
+        async function downloadLog(name){
+          try {
+                const res = await fetch('/logs/file/' + encodeURIComponent(name), {
+                  headers: { 'x-host-pin': hostPin || '' }
+                });
+                if (!res.ok) {
+                  showToast('Errore download log', 'error');
+                  return;
+                }
+                const blob = await res.blob();
+                const url  = URL.createObjectURL(blob);
+                const a    = document.createElement('a');
+                a.href = url;
+                a.download = name;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+          } catch (e) {
+                showToast('Errore download log: ' + e.message, 'error');
+          }
+        }
+
         async function loadLogList() {
   try {
     const res = await fetch('/logs/list', {
@@ -2503,17 +2526,14 @@ function onBidCustom(){
 
     sel.innerHTML = j.files.map(f => `<option value="${f}">${f}</option>`).join('');
     if (j.files.length) {
-      btn.href = '/logs/file/' + encodeURIComponent(j.files[0]);
-      btn.download = j.files[0];
+      btn.dataset.file = j.files[0];
     } else {
-      btn.href = '#';
-      btn.removeAttribute('download');
+      delete btn.dataset.file;
     }
 
     sel.onchange = () => {
       const name = sel.value;
-      btn.href = '/logs/file/' + encodeURIComponent(name);
-      btn.download = name;
+      btn.dataset.file = name;
     };
   } catch (e) {
     showToast('Errore caricamento elenco log: ' + e.message, 'error');
@@ -2811,7 +2831,7 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 				  <div class="section-title">Download log</div>
 				  <div class="row">
 					<select id="logFileSelect" style="min-width:240px"></select>
-					<a id="logDownloadBtn" class="btn" href="#" download>Scarica</a>
+                                        <a id="logDownloadBtn" class="btn" onclick="downloadLog(this.dataset.file)" data-file="">Scarica</a>
 					<button class="btn btn-ghost" onclick="loadLogList()">Aggiorna elenco</button>
 				  </div>
 				</div>
