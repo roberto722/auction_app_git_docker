@@ -649,7 +649,7 @@ let currentBidderId = null;
 
 // === WebSocket ===
 wss.on('connection', (ws) => {
-  const clientId = now() + '-' + Math.random().toString(36).slice(2);
+  const clientId = uuid();
   clients.set(clientId, {
     ws,
     participantId: null,
@@ -733,11 +733,11 @@ wss.on('connection', (ws) => {
 		return;
 	  }
 
-	  // 👇 AUTO-FIX: se l’invito non ha participantId, assegnane uno ora e persistilo
-	  if (!inv.participantId) {
-		inv.participantId = 'p_' + Math.random().toString(36).slice(2, 10);
-		saveInvites(list);
-	  }
+          // 👇 AUTO-FIX: se l’invito non ha participantId, assegnane uno ora e persistilo
+          if (!inv.participantId) {
+                inv.participantId = 'p_' + uuid();
+                saveInvites(list);
+          }
 
 	  // Recupera (o crea) il participant con quell’ID
 	  let p = getParticipant(inv.participantId);
@@ -1441,7 +1441,7 @@ app.post('/host/invite/create', express.json(), (req, res) => {
       const c = clients.get(participantId);
       ensureBudgetFields(c);
       const newP = upsertParticipant({
-        id: 'p_' + Math.random().toString(36).slice(2),
+        id: 'p_' + uuid(),
         name: c.name || safeName || 'Ospite',
         role: c.role || 'bidder',
         isHost: !!c.isHost,
@@ -1470,7 +1470,7 @@ app.post('/host/invite/create', express.json(), (req, res) => {
     let pid = c.participantId;
     if (!pid) {
       const newP = upsertParticipant({
-        id: 'p_' + Math.random().toString(36).slice(2),
+        id: 'p_' + uuid(),
         name: c.name || safeName || 'Ospite',
         role: c.role || 'bidder',
         isHost: !!c.isHost,
