@@ -257,13 +257,13 @@ let calledPlayers = new Set();
 		  ${linked ? '<span class="badge-linked" title="Questo invito è legato a un participant salvato">linked</span>' : ''}
 		`;
 
-		const actionsHtml = inv.revoked
-		  ? '<span class="badge-called">revocato</span>'
-		  : `
-			<button class="btn" data-invite-action="copy" data-id="${inviteId}">Copia</button>
-			<button class="btn" data-invite-action="rotate" data-id="${inviteId}">Ruota</button>
-			<button class="btn btn-danger" data-invite-action="revoke" data-id="${inviteId}">Revoca</button>
-		  `;
+                const actionsHtml = inv.revoked
+                  ? `<span class="badge-called">revocato</span><button class="btn btn-danger" data-invite-action="delete" data-id="${inviteId}">Elimina</button>`
+                  : `
+                        <button class="btn" data-invite-action="copy" data-id="${inviteId}">Copia</button>
+                        <button class="btn" data-invite-action="rotate" data-id="${inviteId}">Ruota</button>
+                        <button class="btn btn-danger" data-invite-action="revoke" data-id="${inviteId}">Revoca</button>
+                  `;
 
 		const tr = document.createElement('tr');
 		tr.innerHTML = `
@@ -477,6 +477,17 @@ if (last?.name && last?.role) {
                   });
                   await fetchInvites();
                   showToast('Nuovo link generato', 'ok');
+                } else if (action === 'delete') {
+                  await fetch('/host/invite/delete', {
+                        method:'POST',
+                        headers:{
+                          'Content-Type':'application/json',
+                          'x-host-pin': hostPin || ''
+                        },
+                        body: JSON.stringify({ id })
+                  });
+                  await fetchInvites();
+                  showToast('Invito eliminato', 'ok');
                 }
 	  } catch (err) {
 		showToast(err.message || 'Errore invito', 'error');
@@ -524,10 +535,32 @@ if (last?.name && last?.role) {
 	  }
 	});
 
-	// Aggiorna elenco on-demand (no polling)
-	document.addEventListener('click', (e) => {
-	  if (e.target && e.target.id === 'inviteRefreshBtn') fetchInvites().catch(err => showToast(err.message, 'error'));
-	});
+        // Aggiorna elenco on-demand (no polling)
+        document.addEventListener('click', (e) => {
+          if (e.target && e.target.id === 'inviteRefreshBtn') fetchInvites().catch(err => showToast(err.message, 'error'));
+        });
+
+        // Elimina tutti gli inviti revocati
+        document.addEventListener('click', async (e) => {
+          if (!e.target || e.target.id !== 'inviteDeleteRevokedBtn') return;
+          if (invitesBusy) return;
+          invitesBusy = true; e.target.disabled = true;
+          try {
+                await fetch('/host/invite/delete-all-revoked', {
+                  method:'POST',
+                  headers:{
+                    'Content-Type':'application/json',
+                    'x-host-pin': hostPin || ''
+                  }
+                });
+                await fetchInvites();
+                showToast('Inviti revocati eliminati', 'ok');
+          } catch (err) {
+                showToast(err.message || 'Errore inviti', 'error');
+          } finally {
+                invitesBusy = false; e.target.disabled = false;
+          }
+        });
 
 	// Popola select quando arrivano gli users
 	// (nel tuo ws.onmessage, dopo broadcast user-list, chiama)
@@ -2834,9 +2867,10 @@ slotsPor: por, slotsDif: dif, slotsCen: cen, slotsAtt: att
 				<select id="inviteUserSelect"></select>
 				<button class="btn" id="inviteCreateBtn">Crea per utente</button>
 
-				<span class="players-spacer"></span>
-				<button class="btn btn-ghost" id="inviteRefreshBtn">Aggiorna</button>
-			  </div>
+                                <span class="players-spacer"></span>
+                                <button class="btn btn-ghost" id="inviteRefreshBtn">Aggiorna</button>
+                                <button class="btn btn-danger" id="inviteDeleteRevokedBtn">Elimina revocati</button>
+                          </div>
 
 			  <div class="table-wrap">
 				<table>
