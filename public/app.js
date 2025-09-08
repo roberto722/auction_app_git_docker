@@ -89,6 +89,8 @@ let playersView  = [];     // giocatori attualmente mostrati (filtrati/ordinati)
     let usersCache = [];
     let rosterCache = {};
     let rosterViewOverride = null; // 'table' | 'cards' | null (auto)
+    let hostPin = null;
+    try { hostPin = localStorage.getItem('hostPin') || null; } catch {}
 let pendingHostLogin = false;
 let pendingJoinName = '';
 let auctionActive = false;  // true quando c’è un’asta in corso (per tutti i ruoli)
@@ -114,6 +116,7 @@ let calledPlayers = new Set();
           try { localStorage.removeItem('inviteToken'); } catch {}
           try { localStorage.removeItem('clientId'); } catch {}
           try { localStorage.removeItem('hostPin'); } catch {}
+          hostPin = null;
           try { localStorage.removeItem('lastLogin'); } catch {}
           try { localStorage.setItem('logout', '1'); } catch {}
 
@@ -201,9 +204,14 @@ let calledPlayers = new Set();
 	  return `${location.origin}/?t=${encodeURIComponent(token)}`;
 	}
 
-	async function fetchInvites() {
-	  const r = await fetch('/host/invite/list');
-	  const j = await r.json();
+        async function fetchInvites() {
+          const r = await fetch('/host/invite/list', {
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-host-pin': hostPin || ''
+                }
+          });
+          const j = await r.json();
 	  if (!j.success || !Array.isArray(j.invites)) {
 		throw new Error('Impossibile caricare gli inviti');
 	  }
@@ -287,19 +295,25 @@ let calledPlayers = new Set();
                 ws.send(JSON.stringify({ type:'join-by-invite', token }));
                 // se l’utente aveva selezionato host in precedenza, prova il PIN salvato
                 const last = JSON.parse(localStorage.getItem('lastLogin') || '{}');
-		if (last?.role === 'host' && last?.pin) {
-		  ws.send(JSON.stringify({ type:'host-login', pin: last.pin }));
-		}
-		return;
-	  }
-	  // 2) fallback: usa l’ultimo login manuale salvato
+                if (last?.role === 'host' && last?.pin) {
+                  hostPin = last.pin;
+                  try { localStorage.setItem('hostPin', last.pin); } catch {}
+                  ws.send(JSON.stringify({ type:'host-login', pin: last.pin }));
+                }
+                return;
+          }
+          // 2) fallback: usa l’ultimo login manuale salvato
   try {
 const last = JSON.parse(localStorage.getItem('lastLogin') || '{}');
 if (last?.name && last?.role) {
   if (last.role === 'host' || last.role === 'monitor') {
         if (last.pin) {
           ws.send(JSON.stringify({ type:'join', name:last.name, role:'monitor', pin:last.pin }));
-          if (last.role === 'host') ws.send(JSON.stringify({ type:'host-login', pin:last.pin }));
+          if (last.role === 'host') {
+            hostPin = last.pin;
+            try { localStorage.setItem('hostPin', last.pin); } catch {}
+            ws.send(JSON.stringify({ type:'host-login', pin:last.pin }));
+          }
         }
   }
 }
@@ -373,12 +387,15 @@ if (last?.name && last?.role) {
 	  const role = (document.getElementById('invRoleNew')?.value || 'bidder');
 	  if (!name) { showToast('Inserisci un nome', 'warn'); invitesBusy = false; e.target.disabled = false; return; }
 
-	  try {
-		const r = await fetch('/host/invite/create', {
-		  method: 'POST',
-		  headers: {'Content-Type':'application/json'},
-		  body: JSON.stringify({ name, role })
-		});
+          try {
+                const r = await fetch('/host/invite/create', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type':'application/json',
+                    'x-host-pin': hostPin || ''
+                  },
+                  body: JSON.stringify({ name, role })
+                });
 		const j = await r.json();
 		if (!j.success) throw new Error(j.error || 'Errore creazione invito');
 
@@ -421,15 +438,29 @@ if (last?.name && last?.role) {
 		if (invitesBusy) return;
 		invitesBusy = true; btn.disabled = true;
 
-		if (action === 'revoke') {
-		  await fetch('/host/invite/revoke', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id })});
-		  await fetchInvites();
-		  showToast('Invito revocato', 'ok');
-		} else if (action === 'rotate') {
-		  await fetch('/host/invite/rotate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id })});
-		  await fetchInvites();
-		  showToast('Nuovo link generato', 'ok');
-		}
+                if (action === 'revoke') {
+                  await fetch('/host/invite/revoke', {
+                        method:'POST',
+                        headers:{
+                          'Content-Type':'application/json',
+                          'x-host-pin': hostPin || ''
+                        },
+                        body: JSON.stringify({ id })
+                  });
+                  await fetchInvites();
+                  showToast('Invito revocato', 'ok');
+                } else if (action === 'rotate') {
+                  await fetch('/host/invite/rotate', {
+                        method:'POST',
+                        headers:{
+                          'Content-Type':'application/json',
+                          'x-host-pin': hostPin || ''
+                        },
+                        body: JSON.stringify({ id })
+                  });
+                  await fetchInvites();
+                  showToast('Nuovo link generato', 'ok');
+                }
 	  } catch (err) {
 		showToast(err.message || 'Errore invito', 'error');
 	  } finally {
@@ -456,11 +487,14 @@ if (last?.name && last?.role) {
 		  ? { participantId, name: user?.name || '' }  // bind a participant esistente
 		  : { clientId,       name: user?.name || '' }; // crea participant dal client connesso
 
-		const r = await fetch('/host/invite/create', {
-		  method: 'POST',
-		  headers: {'Content-Type':'application/json'},
-		  body: JSON.stringify(body)
-		});
+                const r = await fetch('/host/invite/create', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type':'application/json',
+                    'x-host-pin': hostPin || ''
+                  },
+                  body: JSON.stringify(body)
+                });
 		const j = await r.json();
 		if (!j.success) throw new Error(j.error || 'Errore creazione invito');
 
@@ -971,7 +1005,11 @@ return;
   ensureWS(() => {
 if (token) {
   ws.send(JSON.stringify({ type:'join-by-invite', token }));
-  if (role === 'host' && pin) ws.send(JSON.stringify({ type:'host-login', pin }));
+  if (role === 'host' && pin) {
+    hostPin = pin;
+    try { localStorage.setItem('hostPin', pin); } catch {}
+    ws.send(JSON.stringify({ type:'host-login', pin }));
+  }
   return;
 }
 if (!name) { alert('Inserisci il nome'); return; }
@@ -979,6 +1017,8 @@ if (!name) { alert('Inserisci il nome'); return; }
   if (!pin) { alert('Inserisci il PIN gestore'); return; }
   ws.send(JSON.stringify({ type:'join', name, role: 'monitor', pin }));
   if (role === 'host') {
+        hostPin = pin;
+        try { localStorage.setItem('hostPin', pin); } catch {}
         ws.send(JSON.stringify({ type:'host-login', pin }));
   }
   return;
@@ -1168,9 +1208,10 @@ if (d.type === 'host-auth') {
                   if (d.success) {
                         myRole = 'host'; isHost = true;
                         if (d.clientId) myId = d.clientId;
+                        try { localStorage.setItem('hostPin', hostPin || ''); } catch {}
 
-			// fine attesa host
-			pendingHostLogin = false;
+                        // fine attesa host
+                        pendingHostLogin = false;
 
 			setStatus('Login gestore ✅', true);
 
@@ -1188,11 +1229,13 @@ if (d.type === 'host-auth') {
         renderUsers(usersCache);
   } else {
         // PIN errato → torna alla login “normale”
-			pendingHostLogin = false;
-			setStatus('PIN errato ❌', false, true);
-		  }
-		  return;
-		}
+                        pendingHostLogin = false;
+                        hostPin = null;
+                        try { localStorage.removeItem('hostPin'); } catch {}
+                        setStatus('PIN errato ❌', false, true);
+                  }
+                  return;
+                }
 
 
 if (d.type === 'players-list') {
