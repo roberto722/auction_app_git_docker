@@ -176,7 +176,8 @@
     .quick-bid-wrap { margin-top: auto; max-width: 500px; margin-left: auto; margin-right: auto; }
     .quick-bid { display: grid; grid-template-columns: 1fr; gap: var(--spacing-md); }
     .bid-bottom-bar { display:flex; justify-content:space-between; align-items:center; gap:var(--spacing-sm); padding:var(--spacing-sm); background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.1); }
-    #mobileAuctionOverlay { position:fixed; top:0; left:0; right:0; z-index:9995; padding:var(--spacing-sm); background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.1); display:flex; flex-direction:column; align-items:stretch; }
+    #mobileAuctionOverlay { position:fixed; top:0; left:0; right:0; z-index:9995; padding:var(--spacing-sm); background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.1); display:none; flex-direction:column; align-items:stretch; }
+    .show-mobile-overlay #mobileAuctionOverlay { display:flex; }
     #mobileAuctionOverlay .mobile-overlay-top { display:flex; align-items:flex-start; }
     #mobileAuctionOverlay .mobile-overlay-left { flex:1; }
     #mobileAuctionOverlay .mobile-overlay-right { flex:0 0 auto; margin-left:var(--spacing-sm); }
@@ -184,9 +185,8 @@
     .player-img { width:64px; height:64px; object-fit:contain; border-radius:8px; }
 
     @media (min-width: 601px) {
-      #mobileAuctionOverlay { display:none; }
-	  #bidInputRow { max-width: 500px; margin-left: auto; margin-right: auto; }
-	  #bidderCard { width: 95%; margin-left: auto; margin-right: auto; }
+          #bidInputRow { max-width: 500px; margin-left: auto; margin-right: auto; }
+          #bidderCard { width: 95%; margin-left: auto; margin-right: auto; }
     }
 
     .qbtn { position: relative; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 22px 24px; border: none; border-radius: 16px;
@@ -208,7 +208,6 @@
       #bidderMetaBox { font-size:14px; padding:6px 8px; }
       #bidderMetaBox div { margin:2px 0; }
       #bidInputRow { display:none; }
-      #mobileAuctionOverlay { display:flex; }
       #bidderCard { margin-top: var(--overlay-height, 0px); }
     }
 
