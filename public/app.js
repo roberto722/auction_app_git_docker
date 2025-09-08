@@ -2486,15 +2486,20 @@ function onBidCustom(){
 	  }
 	}
 
-	async function loadLogList() {
+        async function loadLogList() {
   try {
-    const res = await fetch('/logs/list');
+    const res = await fetch('/logs/list', {
+      headers: { 'x-host-pin': hostPin || '' }
+    });
     const j = await res.json();
     const sel = document.getElementById('logFileSelect');
     const btn = document.getElementById('logDownloadBtn');
     if (!sel || !btn) return;
 
-    if (!j.success) throw new Error(j.error || 'Errore elenco log');
+    if (!j.success) {
+      showToast(j.error || 'Errore elenco log', 'error');
+      return;
+    }
 
     sel.innerHTML = j.files.map(f => `<option value="${f}">${f}</option>`).join('');
     if (j.files.length) {
