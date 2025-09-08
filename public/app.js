@@ -2118,33 +2118,38 @@ function canonicalRowFront(row) {
   return { Nome, Ruolo, Squadra, ValoreBase, Immagine };
 }
 
-	function onUploadCsv(){
-	  const f = $('csvFile')?.files?.[0];
-	  if (!f) { setStatus('Seleziona un CSV', false, true); return; }
-	  const fd = new FormData();
-	  fd.append('csv', f);
+        async function onUploadCsv(){
+          const f = $('csvFile')?.files?.[0];
+          if (!f) { setStatus('Seleziona un CSV', false, true); return; }
+          const fd = new FormData();
+          fd.append('csv', f);
 
-	  fetch('/upload', { method:'POST', body: fd })
-		.then(r => r.json())
-		.then(j => {
-		  if (!j.success) throw new Error(j.error || 'Upload fallito');
+          try {
+                const r = await fetch('/upload', {
+                  method:'POST',
+                  headers: { 'x-host-pin': hostPin || '' },
+                  body: fd
+                });
+                const j = await r.json();
+                if (!j.success) throw new Error(j.error || 'Upload fallito');
 
-		  const raw = Array.isArray(j.players) ? j.players : [];
-		  playersCache = raw.map(canonicalRowFront).filter(p => p.Nome);
-		  calledPlayers = new Set();
+                const raw = Array.isArray(j.players) ? j.players : [];
+                playersCache = raw.map(canonicalRowFront).filter(p => p.Nome);
+                calledPlayers = new Set();
 
-		  // opzionale: id stabile per debug
-		  let autoinc = 1;
-		  playersCache.forEach(p => { if (!p._id) p._id = `p_${autoinc++}`; });
+                // opzionale: id stabile per debug
+                let autoinc = 1;
+                playersCache.forEach(p => { if (!p._id) p._id = `p_${autoinc++}`; });
 
-		  setStatus(`CSV caricato ✅ (${playersCache.length} giocatori)`, true);
-		  renderPlayers(); // userà la view
-		  nomHydrateTeams();
-		  nomHydrateRoles();
-		  nomApplyFilters();
-		})
-		.catch(e => setStatus('Errore upload CSV: '+e.message, false, true));
-	}
+                setStatus(`CSV caricato ✅ (${playersCache.length} giocatori)`, true);
+                renderPlayers(); // userà la view
+                nomHydrateTeams();
+                nomHydrateRoles();
+                nomApplyFilters();
+          } catch (e) {
+                setStatus('Errore upload CSV: ' + (e.message || ''), false, true);
+          }
+        }
 
 
 	
