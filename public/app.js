@@ -139,6 +139,22 @@ let calledPlayers = new Set();
     function setText(id, value){ const el = $(id); if (el) el.textContent = value; }
     function hide(el){ if (el) el.style.display = 'none'; }
     function show(el){ if (el) el.style.display = 'block'; }
+
+    function handleViewportChange() {
+      const isMobile = window.matchMedia('(max-width: 600px)').matches;
+      if (myRole === 'bidder' && isMobile) {
+        document.body.classList.add('show-mobile-overlay');
+        const mob = document.getElementById('mobileAuctionOverlay');
+        if (mob) {
+          mob.style.display = '';
+          document.documentElement.style.setProperty('--overlay-height', `${mob.offsetHeight}px`);
+        }
+      } else {
+        document.body.classList.remove('show-mobile-overlay');
+        document.documentElement.style.removeProperty('--overlay-height');
+      }
+    }
+    window.addEventListener('resize', handleViewportChange);
 	
 	function playerKeyFromObj(p){
 	  if (!p) return '';
@@ -1092,20 +1108,26 @@ if (d.type === 'joined') {
                   if (infoPanel) infoPanel.style.display = 'block';
                   const infoOverlay = document.getElementById('infoOverlay');
                   if (infoOverlay) infoOverlay.style.display = 'flex';
-                  if (myRole === 'bidder') {
-                        document.getElementById('bidderCard').style.display = 'block';
-                        const row = document.getElementById('bidderMetaRow'); if (row) row.style.display = 'none';
-                        const rowCountdown = document.getElementById('bidderCountdownRow'); if (rowCountdown) rowCountdown.style.display = 'none';
-                        document.body.classList.add('show-mobile-overlay');
-                        const mob = document.getElementById('mobileAuctionOverlay');
-                        if (mob) {
-                              mob.style.display = '';
-                              document.documentElement.style.setProperty('--overlay-height', `${mob.offsetHeight}px`);
-                        }
-                  } else {
-                        document.body.classList.remove('show-mobile-overlay');
-                        document.documentElement.style.removeProperty('--overlay-height');
-                  }
+                    if (myRole === 'bidder') {
+                          document.getElementById('bidderCard').style.display = 'block';
+                          const row = document.getElementById('bidderMetaRow'); if (row) row.style.display = 'none';
+                          const rowCountdown = document.getElementById('bidderCountdownRow'); if (rowCountdown) rowCountdown.style.display = 'none';
+                          const isMobile = window.matchMedia('(max-width: 600px)').matches;
+                          if (isMobile) {
+                                document.body.classList.add('show-mobile-overlay');
+                                const mob = document.getElementById('mobileAuctionOverlay');
+                                if (mob) {
+                                      mob.style.display = '';
+                                      document.documentElement.style.setProperty('--overlay-height', `${mob.offsetHeight}px`);
+                                }
+                          } else {
+                                document.body.classList.remove('show-mobile-overlay');
+                                document.documentElement.style.removeProperty('--overlay-height');
+                          }
+                    } else {
+                          document.body.classList.remove('show-mobile-overlay');
+                          document.documentElement.style.removeProperty('--overlay-height');
+                    }
   if (myRole === 'monitor') {
           showMonitorCard();
   }

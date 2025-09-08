@@ -180,8 +180,12 @@
     .show-mobile-overlay #mobileAuctionOverlay { display:flex; }
     #mobileAuctionOverlay .mobile-overlay-top { display:flex; align-items:flex-start; }
     #mobileAuctionOverlay .mobile-overlay-left { flex:1; }
-    #mobileAuctionOverlay .mobile-overlay-right { flex:0 0 auto; margin-left:var(--spacing-sm); }
-    #mobileAuctionOverlay .bid-bottom-bar { margin-top:var(--spacing-sm); }
+      #mobileAuctionOverlay .mobile-overlay-right { flex:0 0 auto; margin-left:var(--spacing-sm); }
+      #mobileAuctionOverlay .bid-bottom-bar { margin-top:var(--spacing-sm); }
+
+      @media (min-width: 601px) {
+        #mobileAuctionOverlay { display: none !important; }
+      }
     .player-img { width:64px; height:64px; object-fit:contain; border-radius:8px; }
 
     @media (min-width: 601px) {
