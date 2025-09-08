@@ -21,6 +21,13 @@ app.set('trust proxy', 1);
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+function ensureHost(req, res, next) {
+  const pin = req.get('x-host-pin');
+  if (pin && pin === HOST_PIN) return next();
+  return res.status(403).json({ success: false, error: 'forbidden' });
+}
+
+app.use('/host', ensureHost);
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/health', (_req, res) => res.type('text').send('ok'));
@@ -123,7 +130,7 @@ function appendLogToFile(entry) {
 }
 
 // --- Scarica il log di oggi ---
-app.get('/logs/today', (req, res) => {
+app.get('/logs/today', ensureHost, (req, res) => {
   try {
     const file = logFileForToday();
     if (!fs.existsSync(file)) return res.status(404).type('text').send('Nessun log per oggi');
@@ -134,7 +141,7 @@ app.get('/logs/today', (req, res) => {
 });
 
 // --- Elenco dei log disponibili (opzione avanzata) ---
-app.get('/logs/list', (req, res) => {
+app.get('/logs/list', ensureHost, (req, res) => {
   fs.readdir(LOG_DIR, (err, files) => {
     if (err) return res.status(500).json({ success:false, error: err.message });
     const list = (files || [])
@@ -145,7 +152,7 @@ app.get('/logs/list', (req, res) => {
 });
 
 // --- Download log per nome (opzione avanzata) ---
-app.get('/logs/file/:name', (req, res) => {
+app.get('/logs/file/:name', ensureHost, (req, res) => {
   const name = req.params.name;
   // piccola sanitizzazione: niente path traversal, solo .log
   if (!/^[\w.-]+\.log$/.test(name)) return res.status(400).type('text').send('Nome file non valido');
@@ -194,7 +201,7 @@ function canonicalRow(row) {
 }
 
 
-app.post('/upload', upload.single('csv'), async (req, res) => {
+app.post('/upload', ensureHost, upload.single('csv'), async (req, res) => {
   const parseCsv = (opts) => new Promise((resolve, reject) => {
     const rows = [];
     fs.createReadStream(req.file.path)
@@ -1378,15 +1385,9 @@ function participantName(pid) {
   return p?.name || 'Anonimo';
 }
 
-app.use(express.json());
+  app.use(express.json());
 
-// (facoltativo) middleware minimo per proteggere endpoint inviti
-function ensureHostWeak(req, res, next){
-  // più semplice: accetta tutto; per hardened, usa una sessione/cookie
-  next();
-}
-
-const INV_DB = path.join(__dirname, 'data', 'invites.json');
+  const INV_DB = path.join(__dirname, 'data', 'invites.json');
 
 function loadInvites() {
   try { return JSON.parse(fs.readFileSync(INV_DB, 'utf8')); } catch { return []; }
@@ -1400,13 +1401,11 @@ function randomToken(n = 32) {
 }
 
 app.get('/host/participants/list', (req, res) => {
-  if (!isHostReq(req)) return res.status(403).json({ success:false, error:'forbidden' });
   res.json({ success: true, participants: listParticipantsWithOnline() });
 });
 
 // POST crea/ottieni (idempotente)
 app.post('/host/invite/create', express.json(), (req, res) => {
-  if (!isHostReq(req)) return res.status(403).json({ success:false, error:'forbidden' });
 
   const { participantId = null, clientId = null, name = '', role = 'bidder' } = req.body || {};
   const safeName = String(name || '').trim();
@@ -1520,7 +1519,6 @@ app.post('/host/invite/create', express.json(), (req, res) => {
 
 
 app.get('/host/invite/list', (req, res) => {
-  if (!isHostReq(req)) return res.status(403).json({ success:false, error:'forbidden' });
   const list = loadInvites().map(x => ({ ...x, role: x.role || 'bidder' }));
   res.json({ success:true, invites: list });
 });
@@ -1528,7 +1526,6 @@ app.get('/host/invite/list', (req, res) => {
 
 // POST rotate (genera nuovo token, opzionale)
 app.post('/host/invite/rotate', express.json(), (req, res) => {
-  if (!isHostReq(req)) return res.status(403).json({ success:false, error:'forbidden' });
   const { id } = req.body || {};
   if (!id) return res.json({ success:false, error:'bad-input' });
 
@@ -1546,7 +1543,6 @@ app.post('/host/invite/rotate', express.json(), (req, res) => {
 
 // POST revoke (non cancella, marca revoked)
 app.post('/host/invite/revoke', express.json(), (req, res) => {
-  if (!isHostReq(req)) return res.status(403).json({ success:false, error:'forbidden' });
   const { id } = req.body || {};
   if (!id) return res.json({ success:false, error:'bad-input' });
 
@@ -1560,13 +1556,6 @@ app.post('/host/invite/revoke', express.json(), (req, res) => {
 
   res.json({ success:true });
 });
-
-
-function isHostReq(req) {
-  // Usa la tua auth host (es. cookie di sessione del PIN host)
-  // oppure consenti solo da localhost/loopback nel tuo setup attuale.
-  return true;
-}
 
 
 app.get('/join/by-token/:token', (req, res) => {
