@@ -1572,6 +1572,30 @@ app.post('/host/invite/revoke', express.json(), (req, res) => {
   res.json({ success:true });
 });
 
+// POST delete (rimuove invito revocato)
+app.post('/host/invite/delete', express.json(), (req, res) => {
+  const { id } = req.body || {};
+  if (!id) return res.json({ success:false, error:'bad-input' });
+
+  const list = loadInvites();
+  const idx = list.findIndex(x => x.id === id);
+  if (idx < 0) return res.json({ success:false, error:'not-found' });
+  if (!list[idx].revoked) return res.json({ success:false, error:'not-revoked' });
+
+  list.splice(idx, 1);
+  saveInvites(list);
+
+  res.json({ success:true });
+});
+
+// POST delete tutti gli inviti revocati
+app.post('/host/invite/delete-all-revoked', express.json(), (req, res) => {
+  const list = loadInvites();
+  const filtered = list.filter(x => !x.revoked);
+  saveInvites(filtered);
+  res.json({ success:true });
+});
+
 
 app.get('/join/by-token/:token', (req, res) => {
   const { token } = req.params;
