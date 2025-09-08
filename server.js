@@ -1,4 +1,5 @@
 // server.js
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const path = require('path');
@@ -8,7 +9,12 @@ const csv = require('csv-parser');
 const fs = require('fs');
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-const HOST_PIN = process.env.HOST_PIN || '1234';
+const HOST_PIN = process.env.HOST_PIN;
+const INVITE_SECRET = process.env.INVITE_SECRET;
+if (!HOST_PIN || !INVITE_SECRET) {
+  console.error('Missing required env vars HOST_PIN and/or INVITE_SECRET');
+  process.exit(1);
+}
 
 const app = express();
 app.set('trust proxy', 1);
@@ -1318,7 +1324,6 @@ wss.on('connection', (ws) => {
         });
 });
 
-require('dotenv').config();
 const { v4: uuid } = require('uuid');
 const { sign, verify } = require('./lib/token');
 const { getParticipant, upsertParticipant, deleteParticipant, listParticipants, addPlayer, removePlayer, movePlayer } = require('./lib/registry');
@@ -1373,7 +1378,6 @@ function participantName(pid) {
   return p?.name || 'Anonimo';
 }
 
-const INVITE_SECRET = process.env.INVITE_SECRET || 'dev-secret';
 app.use(express.json());
 
 // (facoltativo) middleware minimo per proteggere endpoint inviti
