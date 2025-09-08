@@ -1551,6 +1551,21 @@ app.post('/host/invite/revoke', express.json(), (req, res) => {
   if (!inv) return res.json({ success:false, error:'not-found' });
 
   inv.revoked = true;
+  const pid = inv.participantId;
+  if (pid) {
+    const cid = participantClients.get(pid);
+    if (cid && clients.has(cid)) {
+      clients.get(cid).ws.close(4001, 'invito revocato');
+      clients.delete(cid);
+    }
+    participantClients.delete(pid);
+    deleteParticipant(pid);
+    nominationOrder = nominationOrder.filter(x => x !== pid);
+    if (currentNominatorId === pid) pickFirstEligible();
+    broadcastRoster();
+    broadcastUsers();
+    if (roundMode) broadcastRoundState();
+  }
   inv.revokedAt = Date.now();
   saveInvites(list);
 
